@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# TEST: safety.borrow.dangling-block-assignment
+# EXPECT: compile-fail
+# EXPECT-DIAGNOSTIC: E0405
+
+func bad_block_reference() -> i32:
+    val outer = 1
+    var reference = borrow outer
+    scope:
+        val inner = 2
+        reference = borrow inner
+    return deref reference

@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# TEST: codegen.asm.x86-64-inout
+# EXPECT: compile-pass
+
+func main() -> i32:
+    var value = 1
+    unsafe:
+        asm("add $$1, $0", inout("+r", value), volatile, clobber("cc"))
+    return value - 2

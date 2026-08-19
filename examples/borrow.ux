@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+func read(value: ref i32) -> i32:
+    return deref value
+func main() -> i32:
+    val value = 0
+    val borrowed = borrow value
+    return read(borrowed)

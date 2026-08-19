@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# Uinx std::async
+
+public trait Future[T]:
+    func poll(state: mutptr Self, output: mutptr T) -> i32
+
+unsafe extern "C" func uinx_block_on(poll: ptr u8, state: mutptr u8, output: mutptr u8) -> i32

@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# Uinx core::option
+dontneed std
+
+public struct Option[T]:
+    has_value: bool
+    value: T
+
+public func option_is_some[T](value: ref Option[T]) -> bool:
+    return value.has_value
+
+public func option_is_none[T](value: ref Option[T]) -> bool:
+    return not value.has_value
+
+public func option_unwrap_copy[T: Copy](value: ref Option[T]) -> T:
+    return value.value

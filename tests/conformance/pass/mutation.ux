@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# TEST: conformance.positive.mutation
+# EXPECT: compile-pass
+
+func main() -> i32:
+    var x = 1
+    x += 4
+    x = x * 2
+    return x - 10

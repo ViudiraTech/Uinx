@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# TEST: conformance.positive.reference-parameter-return
+# EXPECT: compile-pass
+
+func identity_ref(value: ref i32) -> ref i32:
+    return value
+
+func main() -> i32:
+    val value = 9
+    val borrowed = identity_ref(borrow value)
+    return deref borrowed - 9

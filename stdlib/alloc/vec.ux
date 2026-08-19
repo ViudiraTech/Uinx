@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# Uinx alloc::vec
+
+public struct RawVec:
+    data: mutptr u8
+    len: usize
+    cap: usize
+    elem_size: usize
+    elem_align: usize
+
+unsafe extern "C" func uinx_vec_init(vec: mutptr RawVec, elem_size: usize, elem_align: usize) -> i32
+unsafe extern "C" func uinx_vec_reserve(vec: mutptr RawVec, additional: usize) -> i32
+unsafe extern "C" func uinx_vec_push(vec: mutptr RawVec, elem: ptr u8) -> i32
+unsafe extern "C" func uinx_vec_pop(vec: mutptr RawVec, out_elem: mutptr u8) -> i32
+unsafe extern "C" func uinx_vec_drop(vec: mutptr RawVec) -> unit
+
+public struct Vec[T]:
+    raw: RawVec

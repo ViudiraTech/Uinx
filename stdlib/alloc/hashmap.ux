@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# Uinx alloc::hashmap
+
+public struct HashMap[K, V]:
+    raw: mutptr u8
+
+unsafe extern "C" func uinx_hashmap_new() -> mutptr u8
+unsafe extern "C" func uinx_hashmap_put(map: mutptr u8, key: ptr u8, key_len: usize, value: usize) -> i32
+unsafe extern "C" func uinx_hashmap_get(map: ptr u8, key: ptr u8, key_len: usize, out_value: mutptr usize) -> i32
+unsafe extern "C" func uinx_hashmap_remove(map: mutptr u8, key: ptr u8, key_len: usize, out_value: mutptr usize) -> i32
+unsafe extern "C" func uinx_hashmap_len(map: ptr u8) -> usize
+unsafe extern "C" func uinx_hashmap_drop(map: mutptr u8) -> unit

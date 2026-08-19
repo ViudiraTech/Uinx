@@ -1,0 +1,42 @@
+Internal ctest changing into directory: /mnt/data/uinx_work/Uinx-Language-Release/build-final
+Test project /mnt/data/uinx_work/Uinx-Language-Release/build-final
+      Start  1: unit.compiler
+ 1/18 Test  #1: unit.compiler .........................   Passed    0.01 sec
+      Start  2: unit.runtime
+ 2/18 Test  #2: unit.runtime ..........................   Passed    0.01 sec
+      Start  3: codegen.asm-object
+ 3/18 Test  #3: codegen.asm-object ....................   Passed    0.20 sec
+      Start  4: codegen.asm-input-output
+ 4/18 Test  #4: codegen.asm-input-output ..............   Passed    0.36 sec
+      Start  5: codegen.asm-inout
+ 5/18 Test  #5: codegen.asm-inout .....................   Passed    0.36 sec
+      Start  6: codegen.asm-multiple-outputs
+ 6/18 Test  #6: codegen.asm-multiple-outputs ..........   Passed    0.36 sec
+      Start  7: runtime.slice-index-bounds
+ 7/18 Test  #7: runtime.slice-index-bounds ............   Passed    0.39 sec
+      Start  8: runtime.slice-index-oob-traps
+ 8/18 Test  #8: runtime.slice-index-oob-traps .........   Passed    0.38 sec
+      Start  9: runtime.c-ffi
+ 9/18 Test  #9: runtime.c-ffi .........................   Passed    0.37 sec
+      Start 10: codegen.cross-target-objects
+10/18 Test #10: codegen.cross-target-objects ..........   Passed    0.31 sec
+      Start 11: codegen.asm-cross-targets
+11/18 Test #11: codegen.asm-cross-targets .............   Passed    0.26 sec
+      Start 12: codegen.asm-invalid-target-register
+12/18 Test #12: codegen.asm-invalid-target-register ...   Passed    0.06 sec
+      Start 13: codegen.baremetal-cross-link
+13/18 Test #13: codegen.baremetal-cross-link ..........   Passed    1.15 sec
+      Start 14: runtime.async-suspend-resume
+14/18 Test #14: runtime.async-suspend-resume ..........   Passed    0.48 sec
+      Start 15: conformance.positive
+15/18 Test #15: conformance.positive ..................   Passed    2.26 sec
+      Start 16: conformance.negative
+16/18 Test #16: conformance.negative ..................   Passed    0.10 sec
+      Start 17: safety.borrow-negative
+17/18 Test #17: safety.borrow-negative ................   Passed    0.16 sec
+      Start 18: tooling.package-integration
+18/18 Test #18: tooling.package-integration ...........   Passed    1.29 sec
+
+100% tests passed, 0 tests failed out of 18
+
+Total Test time (real) =   8.54 sec

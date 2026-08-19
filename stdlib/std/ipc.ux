@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# Uinx std::ipc
+
+unsafe extern "C" func uinx_pipe_create(out_fds: mutptr i64) -> i32

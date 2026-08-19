@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# Uinx minimal::sync
+
+public struct Mutex:
+    raw: mutptr u8
+
+unsafe extern "C" func uinx_mutex_new() -> mutptr u8
+unsafe extern "C" func uinx_mutex_lock(mutex: mutptr u8) -> i32
+unsafe extern "C" func uinx_mutex_unlock(mutex: mutptr u8) -> i32
+unsafe extern "C" func uinx_mutex_drop(mutex: mutptr u8) -> unit

@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# TEST: safety.borrow.dangling-struct-field
+# EXPECT: compile-fail
+# EXPECT-DIAGNOSTIC: E0404
+
+struct ReferenceBox:
+    value: ref i32
+
+func bad_struct_reference() -> ReferenceBox:
+    val local = 13
+    return new ReferenceBox(value=borrow local)

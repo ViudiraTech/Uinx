@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# TEST: conformance.positive.hello
+# EXPECT: compile-pass
+
+func add(a: i32, b: i32) -> i32:
+    return a + b
+func main() -> i32:
+    val answer: i32 = add(40, 2)
+    return answer - 42

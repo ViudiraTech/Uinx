@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# TEST: safety.borrow.index-alias
+# EXPECT: compile-fail
+# EXPECT-DIAGNOSTIC: E0401
+
+struct SliceMut[T]:
+    data: mutptr T
+    len: usize
+
+func conflict(var slice: SliceMut[i32]) -> unit:
+    val first = borrow mut slice[0]
+    val second = borrow slice[1]
+    first
+    second
+
+func main() -> i32:
+    return 0

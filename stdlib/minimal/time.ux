@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# Uinx minimal::time
+
+extern "C" func uinx_time_monotonic_ns() -> u64
+
+public func monotonic_ns() -> u64:
+    return uinx_time_monotonic_ns()

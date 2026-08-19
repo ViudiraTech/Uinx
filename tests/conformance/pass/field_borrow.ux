@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# TEST: conformance.positive.field-borrow
+# EXPECT: compile-pass
+
+struct Pair:
+    left: i32
+    right: i32
+func use_refs(left: mutref i32, right: ref i32) -> i32:
+    return deref left + deref right
+func sum_fields(pair: mutref Pair) -> i32:
+    val left = borrow mut pair.left
+    val right = borrow pair.right
+    return use_refs(left, right)

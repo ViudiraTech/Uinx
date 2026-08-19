@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# TEST: conformance.positive.slice-index
+# EXPECT: compile-pass
+
+struct Slice[T]:
+    data: ptr T
+    len: usize
+
+func main() -> i32:
+    val value = 42
+    val slice = new Slice[i32](
+        data=borrow value as ptr i32,
+        len=1 as usize,
+    )
+    return slice[0] - 42

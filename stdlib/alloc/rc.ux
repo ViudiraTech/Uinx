@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# Uinx alloc::rc
+
+public struct Rc[T]:
+    control: mutptr u8
+    value: mutptr T

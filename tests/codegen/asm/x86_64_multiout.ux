@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# TEST: codegen.asm.x86-64-multiout
+# EXPECT: compile-pass
+
+func main() -> i32:
+    var left = 0
+    var right = 0
+    unsafe:
+        asm("mov $$11, $0; mov $$31, $1", out("=r", left), out("=r", right), volatile, clobber("cc"))
+    return left + right - 42

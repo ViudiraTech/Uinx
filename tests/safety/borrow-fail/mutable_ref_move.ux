@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# TEST: safety.borrow.mutable-ref-move
+# EXPECT: compile-fail
+# EXPECT-DIAGNOSTIC: E0400
+
+func consume(value: mutref i32) -> unit:
+    value
+
+func main() -> i32:
+    var x = 1
+    val first = borrow mut x
+    consume(first)
+    consume(first)
+    return 0

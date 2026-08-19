@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# Uinx minimal::thread
+
+public struct Thread:
+    handle: usize
+
+extern "C" func uinx_yield() -> unit
+
+public func yield_now() -> unit:
+    uinx_yield()
+    return

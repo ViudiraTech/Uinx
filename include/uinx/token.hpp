@@ -1,0 +1,115 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 ViudiraTech
+// By JiTianYu391
+
+#pragma once
+
+#include "uinx/common.hpp"
+
+namespace uinx {
+
+enum class TokenKind {
+    End,
+    Newline,
+    Indent,
+    Dedent,
+    Identifier,
+    Integer,
+    Float,
+    String,
+    Char,
+
+    KwFn,
+    KwLet,
+    KwVar,
+    KwMut,
+    KwReturn,
+    KwIf,
+    KwElse,
+    KwWhile,
+    KwFor,
+    KwIn,
+    KwStruct,
+    KwEnum,
+    KwTrait,
+    KwImpl,
+    KwWith,
+    KwPub,
+    KwUnsafe,
+    KwAsync,
+    KwAwait,
+    KwExtern,
+    KwConst,
+    KwStatic,
+    KwMove,
+    KwWhere,
+    KwAs,
+    KwTrue,
+    KwFalse,
+    KwNeed,
+    KwDontNeed,
+    KwUse,
+    KwMod,
+    KwSelf,
+    KwSelfTy,
+    KwDyn,
+    KwAsm,
+    KwRef,
+    KwMutRef,
+    KwPtr,
+    KwMutPtr,
+    KwBorrow,
+    KwDeref,
+    KwNew,
+    KwScope,
+    KwPass,
+
+    LParen,
+    RParen,
+    LBrace,
+    RBrace,
+    LBracket,
+    RBracket,
+    Comma,
+    Dot,
+    Colon,
+    Semicolon,
+    ColonColon,
+    Arrow,
+    FatArrow,
+    Plus,
+    Minus,
+    Star,
+    Slash,
+    Percent,
+    Amp,
+    Pipe,
+    Caret,
+    Bang,
+    Tilde,
+    Eq,
+    EqEq,
+    BangEq,
+    Less,
+    LessEq,
+    Greater,
+    GreaterEq,
+    AndAnd,
+    OrOr,
+    PlusEq,
+    MinusEq,
+    StarEq,
+    SlashEq,
+    AmpMut,
+    Question,
+};
+
+struct Token {
+    TokenKind kind{TokenKind::End};
+    std::string text;
+    SourceRange range;
+};
+
+std::string_view token_name(TokenKind kind);
+
+} // namespace uinx

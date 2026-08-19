@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+async func compute() -> i32:
+    return 42
+async func wrapper() -> i32:
+    val value = await compute()
+    return value
+func main() -> i32:
+    return 0

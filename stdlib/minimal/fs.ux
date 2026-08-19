@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# Uinx minimal::fs
+
+unsafe extern "C" func uinx_file_open(path: ptr u8, flags: i32, mode: i32) -> i64
+extern "C" func uinx_file_close(fd: i64) -> i32
+
+public func close(fd: i64) -> i32:
+    return uinx_file_close(fd)

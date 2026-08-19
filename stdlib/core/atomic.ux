@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# Uinx core::atomic
+dontneed std
+
+public struct AtomicU64:
+    value: u64
+
+unsafe extern "C" func uinx_atomic_load_u64(ptr: ptr u64, order: i32) -> u64
+unsafe extern "C" func uinx_atomic_store_u64(ptr: mutptr u64, value: u64, order: i32) -> unit
+unsafe extern "C" func uinx_atomic_fetch_add_u64(ptr: mutptr u64, value: u64, order: i32) -> u64
+unsafe extern "C" func uinx_atomic_compare_exchange_u64(ptr: mutptr u64, expected: mutptr u64, desired: u64, success_order: i32, failure_order: i32) -> i32

@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# TEST: safety.borrow.use-after-move
+# EXPECT: compile-fail
+# EXPECT-DIAGNOSTIC: E0400
+
+struct Resource:
+    value: i32
+func consume(x: Resource) -> i32:
+    return 0
+func main() -> i32:
+    val x: Resource = make_resource()
+    val y = x
+    consume(x)
+    return 0
+extern "C" func make_resource() -> Resource

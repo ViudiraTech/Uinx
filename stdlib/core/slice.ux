@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# Uinx core::slice
+dontneed std
+
+public struct Slice[T]:
+    data: ptr T
+    len: usize
+
+public struct SliceMut[T]:
+    data: mutptr T
+    len: usize
+
+public func slice_len[T](slice: ref Slice[T]) -> usize:
+    return slice.len

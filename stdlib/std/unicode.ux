@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# Uinx std::unicode
+
+unsafe extern "C" func uinx_utf8_validate(data: ptr u8, len: usize) -> i32
+unsafe extern "C" func uinx_utf8_next(data: ptr u8, len: usize, offset: mutptr usize, codepoint: mutptr u32) -> i32
+unsafe extern "C" func uinx_utf8_encode(codepoint: u32, out: mutptr u8, out_len: mutptr usize) -> i32
+
+public unsafe func validate_utf8(data: ptr u8, len: usize) -> bool:
+    return uinx_utf8_validate(data, len) == 0

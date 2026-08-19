@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# TEST: safety.borrow.dangling-through-call
+# EXPECT: compile-fail
+# EXPECT-DIAGNOSTIC: E0404
+
+func pass_reference(value: ref i32) -> ref i32:
+    return value
+
+func bad_indirect_reference() -> ref i32:
+    val local = 11
+    return pass_reference(borrow local)

@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# Uinx alloc::arc
+
+public struct Arc[T]:
+    control: mutptr u8
+
+unsafe extern "C" func uinx_arc_new_copy(value: ptr u8, size: usize, align: usize) -> mutptr u8
+unsafe extern "C" func uinx_arc_clone(arc: mutptr u8) -> mutptr u8
+unsafe extern "C" func uinx_arc_data(arc: mutptr u8) -> mutptr u8
+unsafe extern "C" func uinx_arc_strong_count(arc: ptr u8) -> u64
+unsafe extern "C" func uinx_arc_release(arc: mutptr u8) -> unit

@@ -1,0 +1,7 @@
+/build/
+/build-*/
+.uinx/
+target/
+*.o
+*.ll
+*.elf

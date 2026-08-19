@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# TEST: codegen.asm.x86-64-io
+# EXPECT: compile-pass
+
+func main() -> i32:
+    var input = 7
+    var output = 0
+    unsafe:
+        asm("mov $1, $0", out("=r", output), in("r", input), volatile, clobber("cc"))
+    return output - 7

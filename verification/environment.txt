@@ -1,0 +1,11 @@
+Uinx 0.2 verification environment
+UTC: 2026-08-19T04:27:08Z
+Linux a40a20264636 6.18.35 #1 SMP Mon Jul 27 18:07:50 UTC 2026 x86_64 GNU/Linux
+
+cmake version 3.31.6
+c++ (Debian 14.2.0-19) 14.2.0
+cc (Debian 14.2.0-19) 14.2.0
+clang version 17.0.0 (https://github.com/swiftlang/llvm-project.git 10999b6d034fe318f3d56c83bddb6572593a8bb0)
+LLD 17.0.0 (https://github.com/swiftlang/llvm-project.git 10999b6d034fe318f3d56c83bddb6572593a8bb0) (compatible with GNU linkers)
+ninja 1.12.1
+clang-format: not installed in verification container

@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# Uinx core::result
+dontneed std
+
+public struct Result[T, E]:
+    is_ok: bool
+    ok: T
+    error: E
+
+public func result_is_ok[T, E](value: ref Result[T, E]) -> bool:
+    return value.is_ok
+
+public func result_is_error[T, E](value: ref Result[T, E]) -> bool:
+    return not value.is_ok
+
+public func result_unwrap_copy[T: Copy, E](value: ref Result[T, E]) -> T:
+    return value.ok

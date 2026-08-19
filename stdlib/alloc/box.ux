@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# Uinx alloc::box
+
+public struct Box[T]:
+    ptr: mutptr T
+
+unsafe extern "C" func uinx_alloc(size: usize, align: usize) -> mutptr u8
+unsafe extern "C" func uinx_dealloc(ptr: mutptr u8, size: usize, align: usize) -> unit

@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# TEST: safety.borrow.alias-mut
+# EXPECT: compile-fail
+# EXPECT-DIAGNOSTIC: E0401
+
+func use_mut(x: mutref i32) -> i32:
+    return 0
+func main() -> i32:
+    var x = 1
+    val a = borrow mut x
+    val b = borrow x
+    return use_mut(a)

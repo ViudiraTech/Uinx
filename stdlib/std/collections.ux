@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# Uinx std::collections
+
+public struct BTreeMap[K, V]:
+    root: mutptr u8
+    len: usize
+
+public struct HashSet[T]:
+    raw: mutptr u8

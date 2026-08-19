@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# TEST: conformance.positive.methods
+# EXPECT: compile-pass
+
+struct Counter:
+    value: i32
+
+extend Counter:
+    func get(self: ref Self) -> i32:
+        return self.value
+
+    func set(self: mutref Self, value: i32) -> unit:
+        self.value = value
+
+func main() -> i32:
+    var counter = new Counter(value=1)
+    counter.set(42)
+    return counter.get() - 42

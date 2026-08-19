@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+extern "C" func abs(value: i32) -> i32
+func main() -> i32:
+    return abs(-1) - 1

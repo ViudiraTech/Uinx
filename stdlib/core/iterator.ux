@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# Uinx core::iterator
+dontneed std
+
+public trait Iterator[T]:
+    func next(iter: mutref Self) -> T
+
+public trait ExactSizeIterator:
+    func len(iter: ref Self) -> usize

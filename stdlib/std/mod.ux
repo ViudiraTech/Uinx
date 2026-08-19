@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# Uinx full std root
+
+public func std_version_major() -> i32:
+    return 0
+
+public func std_version_minor() -> i32:
+    return 1

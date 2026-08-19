@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# Uinx minimal::io
+
+unsafe extern "C" func uinx_file_read(fd: i64, buf: mutptr u8, len: u64) -> i64
+unsafe extern "C" func uinx_file_write(fd: i64, buf: ptr u8, len: u64) -> i64
+
+public unsafe func read(fd: i64, buffer: mutptr u8, len: u64) -> i64:
+    return uinx_file_read(fd, buffer, len)
+
+public unsafe func write(fd: i64, buffer: ptr u8, len: u64) -> i64:
+    return uinx_file_write(fd, buffer, len)

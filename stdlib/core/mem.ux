@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# Uinx core::mem
+dontneed std
+
+unsafe extern "C" func uinx_memcpy(dst: mutptr u8, src: ptr u8, len: usize) -> mutptr u8
+unsafe extern "C" func uinx_memmove(dst: mutptr u8, src: ptr u8, len: usize) -> mutptr u8
+unsafe extern "C" func uinx_memset(dst: mutptr u8, value: i32, len: usize) -> mutptr u8
+
+public unsafe func copy_bytes(dst: mutptr u8, src: ptr u8, len: usize) -> unit:
+    uinx_memcpy(dst, src, len)
+    return
+
+public unsafe func move_bytes(dst: mutptr u8, src: ptr u8, len: usize) -> unit:
+    uinx_memmove(dst, src, len)
+    return

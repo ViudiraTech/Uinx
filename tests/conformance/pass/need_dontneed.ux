@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# TEST: conformance.positive.need-dontneed
+# EXPECT: compile-pass
+
+dontneed std
+need core
+
+func main() -> i32:
+    return 0

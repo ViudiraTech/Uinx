@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# Uinx core module manifest
+dontneed std
+
+public trait Eq:
+    func eq(a: ref Self, b: ref Self) -> bool
+
+public trait Ord:
+    func compare(a: ref Self, b: ref Self) -> i32

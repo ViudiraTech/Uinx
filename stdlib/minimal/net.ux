@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# Uinx minimal::net
+
+extern "C" func uinx_socket(domain: i32, kind: i32, protocol: i32) -> i64
+unsafe extern "C" func uinx_socket_connect(fd: i64, addr: ptr u8, len: u32) -> i32
+unsafe extern "C" func uinx_socket_send(fd: i64, buf: ptr u8, len: u64, flags: i32) -> i64
+unsafe extern "C" func uinx_socket_recv(fd: i64, buf: mutptr u8, len: u64, flags: i32) -> i64
+
+public func socket(domain: i32, kind: i32, protocol: i32) -> i64:
+    return uinx_socket(domain, kind, protocol)

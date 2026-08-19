@@ -1,0 +1,25 @@
+$ build-final/uinxc examples/async_basic.ux --emit=check
+PASS
+
+$ build-final/uinxc examples/baremetal/kernel.ux --emit=check
+PASS
+
+$ build-final/uinxc examples/borrow.ux --emit=check
+PASS
+
+$ build-final/uinxc examples/c_ffi.ux --emit=check
+PASS
+
+$ build-final/uinxc examples/freestanding.ux --emit=check
+PASS
+
+$ build-final/uinxc examples/generics.ux --emit=check
+PASS
+
+$ build-final/uinxc examples/hello.ux --emit=check
+PASS
+
+$ build-final/uinxc examples/inline_asm.ux --emit=check
+PASS
+
+Checked 8 example programs: PASS

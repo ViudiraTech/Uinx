@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+dontneed std
+unsafe func port_barrier() -> unit:
+    asm("nop", volatile, clobber("memory"))
+    return
+func kernel_entry() -> i32:
+    unsafe:
+        port_barrier()
+    return 0

@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# TEST: conformance.positive.trait-method
+# EXPECT: compile-pass
+
+trait Readable:
+    func read(self: ref Self) -> i32
+
+struct Cell:
+    value: i32
+
+extend Cell with Readable:
+    func read(self: ref Self) -> i32:
+        return self.value
+
+func main() -> i32:
+    val cell = new Cell(value=42)
+    return cell.read() - 42

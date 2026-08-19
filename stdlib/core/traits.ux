@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# Uinx core::traits
+dontneed std
+
+public trait Copy:
+    func copy(value: ref Self) -> Self
+
+public trait Drop:
+    unsafe func drop(value: mutref Self) -> unit
+
+public trait Send:
+    func send_marker(value: ref Self) -> unit
+
+public trait Sync:
+    func sync_marker(value: ref Self) -> unit

@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# TEST: runtime.async.suspend-resume
+# EXPECT: compile-pass
+
+extern "C" func uinx_yield_once_i32(value: i32) -> Future[i32]
+
+async func async_answer() -> i32:
+    val value = await uinx_yield_once_i32(42)
+    return value

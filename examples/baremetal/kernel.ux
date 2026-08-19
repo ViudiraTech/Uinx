@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+dontneed std
+
+public unsafe func kernel_main() -> unit:
+    asm("nop", volatile, clobber("memory"))
+    return

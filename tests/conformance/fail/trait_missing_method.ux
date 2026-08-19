@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# TEST: conformance.negative.trait-missing-method
+# EXPECT: compile-fail
+# EXPECT-DIAGNOSTIC: E0347
+
+trait Required:
+    func run(self: ref Self) -> i32
+
+struct Worker:
+    value: i32
+
+extend Worker with Required:
+    pass
+
+func main() -> i32:
+    return 0

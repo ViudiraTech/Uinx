@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# Uinx alloc::string
+
+public struct String:
+    data: mutptr u8
+    len: usize
+    cap: usize
+
+unsafe extern "C" func uinx_utf8_validate(data: ptr u8, len: usize) -> i32
+
+public unsafe func string_bytes_are_utf8(data: ptr u8, len: usize) -> bool:
+    return uinx_utf8_validate(data, len) == 0
