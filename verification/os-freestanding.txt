@@ -1,0 +1,11 @@
+Freestanding kernel/core cross-target verification
+x86_64 package kernel: ELF 64-bit LSB executable, x86-64, version 1 (SYSV), statically linked, not stripped
+aarch64 package kernel: ELF 64-bit LSB executable, ARM aarch64, version 1 (SYSV), statically linked, not stripped
+riscv64 package kernel: ELF 64-bit LSB executable, UCB RISC-V, RVC, soft-float ABI, version 1 (SYSV), statically linked, not stripped
+
+x86_64 direct example: ELF 64-bit LSB executable, x86-64, version 1 (SYSV), statically linked, not stripped
+aarch64 direct example: ELF 64-bit LSB executable, ARM aarch64, version 1 (SYSV), statically linked, not stripped
+riscv64 direct example: ELF 64-bit LSB executable, UCB RISC-V, RVC, soft-float ABI, version 1 (SYSV), statically linked, not stripped
+
+core::atomic + core::ptr + core::sync use test: x86_64/AArch64/RISC-V64 objects had no undefined symbols.
+core::mem pure-Uinx object generation: verified for x86_64/AArch64/RISC-V64.

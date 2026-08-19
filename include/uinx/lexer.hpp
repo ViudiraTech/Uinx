@@ -42,4 +42,4 @@ class Lexer {
     bool line_start_{true};
 };
 
-} // namespace uinx
+}  // namespace uinx

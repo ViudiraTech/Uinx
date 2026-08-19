@@ -17,16 +17,13 @@
 
 namespace uinx {
 struct SourceLoc {
-    std::string file;
-    std::uint32_t line{1};
-    std::uint32_t column{1};
-    std::uint32_t offset{0};
+  std::string file;
+  std::uint32_t line{1};
+  std::uint32_t column{1};
+  std::uint32_t offset{0};
 };
-struct SourceRange {
-    SourceLoc begin;
-    SourceLoc end;
-};
+struct SourceRange { SourceLoc begin; SourceLoc end; };
 inline std::string loc_string(const SourceLoc& l) {
-    return l.file + ":" + std::to_string(l.line) + ":" + std::to_string(l.column);
+  return l.file + ":" + std::to_string(l.line) + ":" + std::to_string(l.column);
 }
-} // namespace uinx
+}

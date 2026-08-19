@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# Uinx core::sync
+# Minimal freestanding synchronization built on compiler-lowered atomics.
+dontneed std
+
+public struct SpinLock:
+    state: AtomicU64
+
+extend SpinLock:
+    public func try_lock(self: mutref Self) -> bool:
+        var expected: u64 = 0
+        return self.state.compare_exchange(borrow mut expected, 1)
+
+    public func lock(self: mutref Self) -> unit:
+        loop:
+            if self.try_lock():
+                return
+            compiler_fence acquire
+
+    public func unlock(self: mutref Self) -> unit:
+        self.state.store(0)
+        return
+
+    public func is_locked(self: ref Self) -> bool:
+        return self.state.load_relaxed() != 0

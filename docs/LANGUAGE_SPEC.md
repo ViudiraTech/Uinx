@@ -1,129 +1,128 @@
-# Uinx Language Specification
+# Uinx 0.3 Language Specification
 
-This document describes the canonical source syntax implemented by the current compiler frontend.
+This document describes the canonical source syntax implemented by the current compiler frontend. Migration aliases may still parse, but new Uinx code should use the syntax documented here.
 
-## 1. Design goals
+## 1. Lexical structure
 
-Uinx is a statically typed AOT systems language with no tracing GC. The language keeps explicit control over allocation, raw memory, FFI and inline assembly while making ordinary source code visually closer to Python than to Rust/C++.
+Uinx is indentation-sensitive. A suite starts after `:` and uses indentation; project style is four spaces. Tabs in indentation are rejected. Blank lines and comments do not alter block depth.
 
-Canonical Uinx uses indentation-sensitive suites. Four spaces are the project style; tabs in indentation are rejected by the lexer. Blank lines and comments do not change block depth.
+```uinx
+# canonical comment
+func answer() -> i32:
+    return 42
+```
 
-Comments use `#`. `//` and nested `/* ... */` remain accepted for migration/source interoperability.
+`//` and nested `/* ... */` remain migration/interoperability comments, not the preferred style.
 
-## 2. Modules and requirements
-
-A module may begin with requirement directives:
+## 2. Requirements and SMP policy
 
 ```uinx
 dontneed std
 need core
+smp auto
 ```
 
-`need name` records a component requirement. `dontneed name` records that the compiler/package layer must not automatically connect that component. A component cannot be both needed and disabled in the same module.
+Implemented requirements:
 
-For the bundled package tool:
+- `need name`: request a component;
+- `dontneed name`: suppress a component;
+- `dontneed std`: canonical freestanding form;
+- `dontneed runtime`: suppress hosted runtime linkage;
+- `dontneed dependency`: exclude a direct manifest path dependency.
 
-- `need std` selects the full hosted standard library;
-- `need minimal`, `need alloc`, or `need core` selects that highest bundled layer;
-- `dontneed std` selects no bundled hosted standard-library layer and suppresses the normal hosted-runtime link;
-- `dontneed runtime` suppresses the runtime archive link;
-- `dontneed dependency_name` excludes that direct manifest path dependency from source collection.
+A component cannot be both needed and disabled in the same module. `no_std;` is a migration alias only.
 
-`no_std;` is accepted only as a migration alias for `dontneed std`.
+The implemented SMP modes are `smp auto`, `smp manual`, and `smp strict`; see `MEMORY_MODEL.md`.
 
-## 3. Declarations
-
-Functions use `func` and a colon-terminated suite:
+## 3. Functions and modifiers
 
 ```uinx
 func add(a: i32, b: i32) -> i32:
     return a + b
-```
 
-Modifiers precede the declaration and can be combined:
-
-```uinx
-public func visible() -> i32:
-    return 0
-
-unsafe func privileged(address: mutptr u8) -> unit:
+public unsafe concurrent func cpu_entry() -> unit:
     return
 
-async func compute() -> i32:
+async func task() -> i32:
     return 42
 
 extern "C" func abs(value: i32) -> i32
 ```
 
-An `extern` declaration has no body. `public` controls language-level visibility. Calls to an `unsafe func` require an unsafe context.
+Implemented declaration modifiers include `public`, `unsafe`, `async`, `concurrent`, and `extern "C"` where semantically valid. Extern declarations have no body.
 
-## 4. Bindings and mutability
-
-`val` creates an immutable local; `var` creates a mutable local:
+## 4. Local bindings and globals
 
 ```uinx
-val answer = 42
-val typed: i64 = 42
-var counter = 0
-counter += 1
+val immutable = 42
+var mutable: i64 = 0
+mutable += 1
+
+const PAGE_SHIFT: u64 = 12
+static var flags: u64 = 0
+shared var online_cpus: u64 = 0
+percpu var local_ticks: u64 = 0
 ```
 
-Assignment to a `val` is rejected. A mutable borrow also requires a mutable place.
+`val` is immutable and `var` is mutable. `const` is a module constant. `static var/val` declares module storage. `shared` marks atomic-compatible shared storage. `percpu` marks CPU-local TLS storage.
 
-## 5. Structs and construction
+## 5. Structures and construction
 
 ```uinx
 struct Pair[T]:
     left: T
     right: T
 
+struct QueueStats:
+    shared pushes: u64
+    local_hint: u64
+
 val pair = new Pair[i32](left=20, right=22)
 ```
 
-Fields are listed one per logical line. Struct construction is explicit with `new`, which avoids the old brace-literal ambiguity with control-flow blocks.
+Construction uses `new Type(field=value, ...)`.
 
-## 6. Generics
-
-Generic declarations and applications use square brackets:
-
-```uinx
-func identity[T: Copy](value: T) -> T:
-    return value
-
-val value = identity[i32](42)
-```
-
-Multiple parameters are comma-separated. Trait bounds use `:` and `+`.
-
-## 7. Traits and extensions
-
-Traits declare contracts:
+## 6. Traits and extensions
 
 ```uinx
 trait Readable:
     func read(self: ref Self) -> i32
-```
 
-Inherent methods use `extend Type:`. Trait implementations use `extend Type with Trait:`:
+extend Cell:
+    public func clear(self: mutref Self) -> unit:
+        self.value = 0
+        return
 
-```uinx
 extend Cell with Readable:
     func read(self: ref Self) -> i32:
         return self.value
 ```
 
-An intentionally empty suite is written with `pass`.
+Use `pass` for an intentionally empty suite.
 
-## 8. References, pointers and ownership
+## 7. Generics
 
-Canonical type spellings are:
+```uinx
+func identity[T: Copy](value: T) -> T:
+    return value
 
-- `ref T`: shared reference;
-- `mutref T`: exclusive mutable reference;
-- `ptr T`: const/raw pointer;
-- `mutptr T`: mutable raw pointer.
+val result = identity[i32](42)
+```
 
-Canonical expression spellings are:
+Generic declarations/applications use square brackets. Multiple bounds use `+`.
+
+## 8. References, pointers, ownership
+
+Types:
+
+```text
+ref T       shared safe reference
+mutref T    exclusive mutable reference
+ptr T       raw const pointer
+mutptr T    raw mutable pointer
+```
+
+Expressions:
 
 ```uinx
 val shared = borrow value
@@ -131,9 +130,14 @@ val unique = borrow mut value
 val copied = deref shared
 ```
 
-Shared references to copyable data are copyable. Mutable references are affine. Non-`Copy` values are moved when consumed by value, and use-after-move is rejected.
+Raw-pointer arithmetic and dereference require unsafe context. Typed pointer `+`/`-` integer arithmetic lowers as element-address computation, and raw-pointer dereference is a valid assignment place:
 
-Loans are shortened to relevant last use. Field-sensitive place tracking permits non-overlapping field loans; indexed places are conservatively treated as potentially overlapping.
+```uinx
+unsafe:
+    deref (buffer + index) = byte
+```
+
+Non-`Copy` values move on by-value use; mutable references are affine. The borrow checker performs last-use loan shortening and field-sensitive place tracking for the verified forms.
 
 ## 9. Control flow
 
@@ -147,34 +151,88 @@ else:
 
 while active:
     tick()
-```
 
-A lexical lifetime-only block can be written explicitly:
+for i in 0 .. 10:
+    consume(i)
 
-```uinx
+for i in 0 ..= 10:
+    consume(i)
+
+loop:
+    if done:
+        break
+    if skip:
+        continue
+
 scope:
     val temporary = 1
 ```
 
-`return` ends the current function. Non-`unit` functions must return a compatible value along accepted MIR paths.
+Implemented statements include `if/elif/else`, `while`, integer-range `for`, `loop`, `break`, `continue`, `scope`, `return`, and `pass`.
 
 ## 10. Expressions and operators
 
-Uinx implements literals, names, calls, method calls, member/index access, unary and binary operations, casts, borrowing, dereference, struct construction, await and inline assembly.
+Implemented expression forms include literals, names, calls, method calls, member/index access, construction, borrow/deref, casts, `await`, and `asm`.
 
-`and`, `or`, and `not` are canonical logical spellings; `&&`, `||`, and `!` remain accepted. Arithmetic/comparison operators use conventional precedence. Casts use `as`:
+Canonical logical operators are:
 
-```uinx
-val raw = borrow value as ptr i32
+```text
+and  or  not
 ```
 
-## 11. Safe indexing
+Arithmetic/bitwise operators include:
 
-`Slice[T]` and `SliceMut[T]` safe indexing emits an unsigned bounds comparison before pointer arithmetic. An out-of-range execution enters an `llvm.trap` path.
+```text
++  -  *  /  %
+&  |  ^  ~
+<< >>
+```
 
-## 12. RAII and Drop
+Comparisons include `==`, `!=`, `<`, `<=`, `>`, `>=`. Assignment forms include ordinary assignment and the implemented arithmetic/bitwise/shift compound operators such as `+=`, `-=`, `*=`, `/=`, `%=`, `&=`, `|=`, `^=`, `<<=`, and `>>=` where type rules permit them.
 
-A non-`Copy` value with a `Drop` implementation receives MIR destruction at normal scope exit:
+Casts use `as`:
+
+```uinx
+val address = raw as usize
+```
+
+## 11. Concurrency declarations
+
+```uinx
+shared var counter: u64 = 0
+percpu var ticks: u64 = 0
+
+public unsafe concurrent func cpu_entry() -> unit:
+    counter += 1
+    ticks += 1
+    return
+```
+
+`concurrent` identifies a function that may execute concurrently; the property propagates through calls. `shared` is explicit shared atomic-compatible storage. `percpu` is local-exec TLS storage. Automatic promotion and ordering rules are specified in `MEMORY_MODEL.md`.
+
+## 12. Fences
+
+```uinx
+fence acquire
+fence release
+fence acq_rel
+fence seq_cst
+
+compiler_fence acquire
+compiler_fence release
+compiler_fence acq_rel
+compiler_fence seq_cst
+```
+
+These lower through MIR/LLVM rather than architecture-specific source rewriting.
+
+## 13. Safe indexing
+
+Safe `Slice[T]`/`SliceMut[T]` indexing emits bounds checks before pointer arithmetic. Out-of-range execution enters an `llvm.trap` path in the verified implementation.
+
+## 14. RAII and Drop
+
+Non-`Copy` values with a `Drop` implementation receive MIR destruction at normal scope exit for the tested forms.
 
 ```uinx
 extend Resource with Drop:
@@ -182,35 +240,35 @@ extend Resource with Drop:
         return
 ```
 
-Complete unwinding semantics and every nested generic destructor case remain outside the verified surface.
+Complete exception/unwind destruction and every nested generic specialization are not claimed as verified.
 
-## 13. Unsafe code
-
-Unsafe context is introduced by an `unsafe func` body or an explicit suite:
+## 15. Unsafe
 
 ```uinx
 unsafe:
     asm("nop", volatile, clobber("memory"))
 ```
 
-Unsafe context permits operations that can invalidate memory-safety invariants, including raw-pointer dereference/arithmetic and inline assembly. Safe callers must cross an explicit unsafe boundary.
+An `unsafe func` body is also an unsafe context. Raw-pointer dereference/arithmetic and inline assembly require unsafe context. Safe code must cross this boundary explicitly.
 
-## 14. C FFI
+## 16. C FFI
 
-`extern "C" func` uses C linkage. Scalar/reference/raw-pointer FFI is supported by the implemented ABI path. Full aggregate ABI equivalence across every target/compiler remains unverified.
+```uinx
+extern "C" func abs(value: i32) -> i32
+```
 
-## 15. Inline assembly
+Scalar/reference/raw-pointer C-linkage paths are implemented. Full aggregate ABI equivalence across every ABI/architecture is not claimed.
 
-`asm()` lowers directly to LLVM inline assembly. Supported operands are `in`, `out`, `inout`, `clobber`, and `volatile`.
+## 17. Inline assembly
 
 ```uinx
 unsafe:
     asm("mov $1, $0", out("=r", output), in("r", input), volatile, clobber("cc"))
 ```
 
-Architecture register validation is implemented for x86_64, AArch64 and RISC-V64 paths covered by the test suite.
+Implemented operands include `in`, `out`, `inout`, `clobber`, and `volatile`. The tested validation/codegen paths cover x86-64, AArch64, and RISC-V64.
 
-## 16. Async/await
+## 18. Async/await
 
 ```uinx
 async func answer() -> i32:
@@ -218,12 +276,23 @@ async func answer() -> i32:
     return value
 ```
 
-Async lowering produces a future frame and poll/drop machinery with saved resume state. Hosted construction currently uses the runtime allocator; allocator-free bare-metal async remains outside the verified surface.
+Hosted async lowering has future-frame suspend/resume machinery. Allocator-free kernel async/executor integration is not part of the verified 0.3 bare-metal surface.
 
-## 17. Compatibility syntax
+## 19. Primitive types
 
-For migration, the lexer/parser still accepts the earlier aliases including `fn`, `pub`, `let`, `let mut`, brace suites, semicolons, `&T`, `&mut T`, `*const T`, `*mut T`, angle-bracket generics and `impl Trait for Type`. They are not the canonical syntax and are not used by the shipped examples/stdlib/tests.
+Implemented primitive spellings include:
 
-## 18. Diagnostics
+```text
+unit never bool
+char str
+i8 i16 i32 i64 i128
+u8 u16 u32 u64 u128
+isize usize
+f32 f64
+```
 
-Diagnostics carry source ranges and stable codes. Negative conformance tests declare `EXPECT-DIAGNOSTIC` and must fail for that specific reason; arbitrary compiler failure is not accepted as a passing negative test.
+## 20. Compatibility syntax
+
+Older Rust/C-shaped aliases such as `fn`, `pub`, `let`, brace/semicolon suites, `&T`, `&mut T`, `*const T`, `*mut T`, angle-bracket generic applications, and `impl Trait for Type` may remain accepted for migration. They are not canonical Uinx 0.3 and should not appear in new examples or standard-library code.
+
+Tokens reserved by the lexer are not automatically part of the language. A construct is canonical only when parser, semantic analysis, lowering/codegen, tests, and this specification agree that it is implemented.

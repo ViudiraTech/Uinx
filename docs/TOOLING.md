@@ -1,48 +1,71 @@
 # Uinx Tooling
 
-**by JiTianYu391**
+**Copyright © 2026 ViudiraTech · Code by JiTianYu391**
 
 ## `uinxc`
 
-The standalone compiler accepts one or more Uinx source files and supports semantic checking, LLVM IR emission, object emission, executable linking, target triples and optimization selection.
+The direct compiler accepts source files and can check, emit LLVM IR, emit objects, or link hosted executables. Important system options include:
 
-## `uinx`
+```text
+--target=<triple>
+--emit=check|llvm-ir|obj
+--smp=auto|manual|strict
+```
 
-The package/build tool reads `uinx.toml`, recursively collects package sources and local path dependencies, writes a deterministic lock record with source hashes, and dispatches the shared compiler pipeline.
+Example:
 
-Commands implemented in this release:
+```sh
+uinxc kernel.ux --target=x86_64-unknown-none --emit=obj -o kernel.o
+```
 
-- `uinx new [--lib] [--freestanding]`
+## `uinx new`
 
-`--no-std` remains accepted as a migration alias for `--freestanding`; new documentation and generated workflows use `--freestanding`.
-- `uinx add NAME --path PATH`
-- `uinx fetch`
-- `uinx check`
-- `uinx build`
-- `uinx run`
-- `uinx test`
-- `uinx fmt [--check]`
-- `uinx lint`
-- `uinx doc`
-- `uinx help`
-- `uinx version`
+Application/library projects:
 
-The integration test executes the complete command sequence for local path packages and also validates observable `need std`, `dontneed std`, and `dontneed dependency` source-selection behavior.
+```sh
+uinx new app
+uinx new lib --lib
+uinx new freestanding --freestanding
+```
 
-A remote registry, cryptographic package signatures, network dependency fetching and content-addressed global caches are `UNVERIFIED` and are not part of the verified package-manager surface.
+`--no-std` remains a migration alias for `--freestanding`.
 
-## Formatter
+Kernel projects:
 
-The formatter normalizes indentation and trailing whitespace deterministically and has a check-only mode suitable for CI. Full comment-aware canonical layout for every future syntax form is `UNVERIFIED`.
+```sh
+uinx new kernel --kernel=x86_64
+uinx new kernel --kernel=aarch64
+uinx new kernel --kernel=riscv64
+```
 
-## Linter
+Kernel generation writes a freestanding manifest, `src/main.ux`, architecture startup assembly, and a linker script. `uinx build --release` produces `target/release/<name>.elf` without libc/the hosted runtime.
 
-The linter reuses parser, resolver, type checker and ownership/borrow checker diagnostics rather than implementing a disconnected parser. A broad style/performance lint catalog is `UNVERIFIED`.
+## Package commands
 
-## LSP
+Implemented primary commands include:
 
-`uinx-lsp` speaks JSON-RPC over stdio and implements initialization, shutdown/exit, open/change document diagnostics and basic hover information. Completion, go-to-definition, references, rename, workspace symbols and semantic tokens are `UNVERIFIED`.
+```text
+uinx new
+uinx build
+uinx run
+uinx check
+uinx test
+uinx fmt
+uinx lint
+uinx doc
+uinx fetch
+uinx add
+```
 
-## Documentation generator
+SMP policy can be overridden for package checking/building:
 
-`uinx doc` parses project sources and writes Markdown API documentation from declarations. It participates in the package-tooling integration test.
+```sh
+uinx check --smp=manual
+uinx build --smp=strict
+```
+
+`uinx run` rejects kernel packages because a bare-metal ELF is not a host process.
+
+## Formatting
+
+`uinx fmt` formats canonical indentation-based Uinx source. C/C++ formatting is defined by the project `.clang-format` and CMake `format` / `format-check` targets when clang-format is installed.

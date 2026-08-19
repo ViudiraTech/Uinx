@@ -1,6 +1,6 @@
 # Security Policy
 
-**by JiTianYu391**
+**Copyright © 2026 ViudiraTech · Code by JiTianYu391**
 
 Uinx treats compiler crashes, safe-language memory-safety escapes, borrow-checker soundness failures, malformed-input parser crashes, package path traversal and runtime memory corruption as security-relevant defects.
 

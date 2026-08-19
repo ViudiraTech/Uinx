@@ -3,16 +3,48 @@
 # By JiTianYu391
 
 # Uinx core::mem
+# Freestanding implementations: no hosted runtime or libc is required.
 dontneed std
 
-unsafe extern "C" func uinx_memcpy(dst: mutptr u8, src: ptr u8, len: usize) -> mutptr u8
-unsafe extern "C" func uinx_memmove(dst: mutptr u8, src: ptr u8, len: usize) -> mutptr u8
-unsafe extern "C" func uinx_memset(dst: mutptr u8, value: i32, len: usize) -> mutptr u8
+public unsafe func memcpy(dst: mutptr u8, src: ptr u8, len: usize) -> mutptr u8:
+    var index: usize = 0 as usize
+    while index < len:
+        deref (dst + index) = deref (src + index)
+        index = index + (1 as usize)
+    return dst
+
+public unsafe func memmove(dst: mutptr u8, src: ptr u8, len: usize) -> mutptr u8:
+    val dst_addr: usize = dst as usize
+    val src_addr: usize = src as usize
+
+    if dst_addr == src_addr or len == (0 as usize):
+        return dst
+
+    if dst_addr < src_addr or dst_addr >= src_addr + len:
+        return memcpy(dst, src, len)
+
+    var index: usize = len
+    while index > (0 as usize):
+        index = index - (1 as usize)
+        deref (dst + index) = deref (src + index)
+    return dst
+
+public unsafe func memset(dst: mutptr u8, value: i32, len: usize) -> mutptr u8:
+    var index: usize = 0 as usize
+    val byte: u8 = value as u8
+    while index < len:
+        deref (dst + index) = byte
+        index = index + (1 as usize)
+    return dst
 
 public unsafe func copy_bytes(dst: mutptr u8, src: ptr u8, len: usize) -> unit:
-    uinx_memcpy(dst, src, len)
+    memcpy(dst, src, len)
     return
 
 public unsafe func move_bytes(dst: mutptr u8, src: ptr u8, len: usize) -> unit:
-    uinx_memmove(dst, src, len)
+    memmove(dst, src, len)
+    return
+
+public unsafe func fill_bytes(dst: mutptr u8, value: u8, len: usize) -> unit:
+    memset(dst, value as i32, len)
     return

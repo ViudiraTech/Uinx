@@ -1,2 +1,2 @@
-Command: build-final/uinxc <all 31 stdlib .ux files> --emit=check
+Command: build-final/uinxc <all 32 stdlib .ux files> --emit=check
 Result: PASS

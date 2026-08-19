@@ -1,6 +1,6 @@
 # Building Uinx
 
-**by JiTianYu391**
+**Copyright © 2026 ViudiraTech · Code by JiTianYu391**
 
 ## Requirements
 

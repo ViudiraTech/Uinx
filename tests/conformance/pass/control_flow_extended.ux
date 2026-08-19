@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+func main() -> i32:
+    var total: i32 = 0
+
+    for i in 0 .. 6:
+        if i == 2:
+            continue
+        total += i
+
+    loop:
+        if total >= 13:
+            break
+        total += 1
+
+    return total - 13

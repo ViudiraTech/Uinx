@@ -1,13 +1,18 @@
 # Verification Artifacts
 
-**by JiTianYu391**
+**Copyright © 2026 ViudiraTech · Code by JiTianYu391**
 
-This directory contains verification records regenerated for the Uinx 0.2 source tree. Historical 0.1 logs were removed because they did not prove the modified source tree.
+This directory contains verification records regenerated for the Uinx 0.3 source tree. Historical logs are not used as evidence for modified code.
 
-- `environment.txt`: toolchain and host information used for this verification pass.
-- `release-build.txt`: clean Release configure/build result.
-- `ctest-release.txt`: the 18-test CTest run for this source tree.
-- `stdlib-check.txt`: aggregate semantic check of every standard-library `.ux` source.
-- `examples-check.txt`: individual semantic checks for every shipped Uinx example.
+- `environment.txt`: compiler/linker and host environment.
+- `release-build.txt`: clean Release configure/build summary.
+- `ctest-release.txt`: the 18-test final CTest run.
+- `stdlib-check.txt`: aggregate semantic check of all 32 standard-library Uinx sources.
+- `examples-check.txt`: individual semantic checks for all shipped Uinx examples.
+- `os-freestanding.txt`: three-architecture kernel ELF and freestanding-core verification summary.
+- `optimizer-check.txt`: O0/O2 MIR optimization probe.
+- `compiler-benchmark.txt`: current-tree lexer/parser/check-pipeline microbenchmark output (not a historical speedup claim).
 
-Fuzz and benchmark targets still exist, but historical results are not presented as current 0.2 evidence.
+Package integration tests create, check, and release-build x86-64, AArch64, and RISC-V64 kernel projects. The direct bare-metal integration test separately cross-compiles architecture startup code and links freestanding ELFs.
+
+Actual boot on every firmware/QEMU/hardware platform remains a separate platform validation because a generic ELF does not define one universal boot protocol.

@@ -63,6 +63,18 @@ enum class TokenKind {
     KwNew,
     KwScope,
     KwPass,
+    KwBreak,
+    KwContinue,
+    KwLoop,
+    KwShared,
+    KwPerCpu,
+    KwConcurrent,
+    KwSmp,
+    KwAuto,
+    KwManual,
+    KwStrict,
+    KwFence,
+    KwCompilerFence,
 
     LParen,
     RParen,
@@ -102,6 +114,16 @@ enum class TokenKind {
     SlashEq,
     AmpMut,
     Question,
+    DotDot,
+    DotDotEq,
+    ShiftLeft,
+    ShiftRight,
+    AmpEq,
+    PipeEq,
+    CaretEq,
+    PercentEq,
+    ShiftLeftEq,
+    ShiftRightEq,
 };
 
 struct Token {
@@ -112,4 +134,4 @@ struct Token {
 
 std::string_view token_name(TokenKind kind);
 
-} // namespace uinx
+}  // namespace uinx

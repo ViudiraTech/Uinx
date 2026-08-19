@@ -3,7 +3,9 @@
 # By JiTianYu391
 
 dontneed std
+need core
+smp auto
 
-public unsafe func kernel_main() -> unit:
+public unsafe concurrent func kernel_main() -> unit:
     asm("nop", volatile, clobber("memory"))
     return

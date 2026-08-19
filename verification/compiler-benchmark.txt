@@ -1,0 +1,3 @@
+lexer_ns_per_iter=5545
+parse_ns_per_iter=8628
+check_pipeline_ns_per_iter=29009

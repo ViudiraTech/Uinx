@@ -84,3 +84,19 @@ run_checked("${WORK}/dontneed_dep" "${UINX}" add broken_dep --path ../broken_dep
 file(WRITE "${WORK}/dontneed_dep/src/main.ux" "dontneed std\ndontneed broken_dep\n\nfunc main() -> i32:\n    return 0\n")
 run_checked("${WORK}/dontneed_dep" "${UINX}" check)
 
+
+# Kernel packages must be genuinely freestanding and cross-linkable through the
+# package tool, not just generated source templates.
+foreach(ARCH IN ITEMS x86_64 aarch64 riscv64)
+  set(KERNEL_NAME "kernel_${ARCH}")
+  run_checked("${WORK}" "${UINX}" new "${KERNEL_NAME}" "--kernel=${ARCH}")
+  run_checked("${WORK}/${KERNEL_NAME}" "${UINX}" check)
+  run_checked("${WORK}/${KERNEL_NAME}" "${UINX}" build --release)
+  if(NOT EXISTS "${WORK}/${KERNEL_NAME}/target/release/${KERNEL_NAME}.elf")
+    message(FATAL_ERROR "kernel scaffold did not produce ${ARCH} ELF")
+  endif()
+endforeach()
+
+# Command-line SMP policy override must work for package builds/checks too.
+run_checked("${WORK}/kernel_x86_64" "${UINX}" check --smp=manual)
+run_checked("${WORK}/kernel_x86_64" "${UINX}" check --smp=strict)

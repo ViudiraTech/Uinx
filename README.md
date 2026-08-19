@@ -2,670 +2,311 @@
 
 # Uinx
 
-### Readable syntax. Systems-level control.
+### Readable syntax. Native code. Built for systems.
 
-A modern, ahead-of-time compiled systems programming language with  
-**Python-style readability**, **native performance**, and **memory safety without a garbage collector**.
+Uinx is an ahead-of-time systems programming language with **Python-style indentation**, **ownership and borrowing**, **LLVM native code generation**, **no tracing GC**, and a first-class **freestanding kernel path**.
 
-<br>
-
-![Version](https://img.shields.io/badge/version-0.2.0-4C8BF5?style=flat-square)
+![Version](https://img.shields.io/badge/version-0.3.0-4C8BF5?style=flat-square)
 ![C++](https://img.shields.io/badge/compiler-C%2B%2B20-00599C?style=flat-square&logo=cplusplus&logoColor=white)
 ![LLVM](https://img.shields.io/badge/backend-LLVM-262D3A?style=flat-square&logo=llvm)
 ![License](https://img.shields.io/badge/license-BSD--3--Clause-44CC11?style=flat-square)
 ![GC](https://img.shields.io/badge/GC-none-success?style=flat-square)
 
-**Developed by ViudiraTech · Code by JiTianYu391**
+**Copyright © 2026 ViudiraTech · Code by JiTianYu391**
 
 </div>
 
 ---
 
-## Overview
+## Why Uinx?
 
-**Uinx** is a native systems programming language designed for operating systems, kernels, drivers, embedded software, high-performance applications, and general native development.
-
-Uinx combines low-level control with a deliberately simple, indentation-based syntax.
-
-```uinx
-func add(a: i32, b: i32) -> i32:
-    return a + b
-
-func main() -> i32:
-    val answer = add(40, 2)
-    return answer - 42
-```
-
-No mandatory braces.
-
-No mandatory semicolons.
-
-No garbage collector.
-
-No transpilation to C or C++.
-
-Uinx compiles through its own native compiler pipeline into LLVM IR and native machine code.
-
----
-
-## Design goals
-
-| | Uinx |
-|---|---|
-| Compilation | Ahead-of-time |
-| Compiler | Modern C++20 |
-| Backend | LLVM |
-| Type system | Strong static typing |
-| Memory management | Ownership + borrowing + RAII |
-| Garbage collector | None |
-| Abstraction model | Zero-cost |
-| Syntax | Indentation-based |
-| C interoperability | Native C FFI |
-| Inline assembly | Supported |
-| Async / Await | Supported |
-| Freestanding development | Supported |
-| License | BSD 3-Clause |
-
-Uinx is designed around one principle:
-
-> **Low-level programming should be powerful without being painful to read.**
-
----
-
-# Language
-
-## Functions
-
-```uinx
-func square(value: i32) -> i32:
-    return value * value
-```
-
-## Variables
-
-Immutable values use `val`:
-
-```uinx
-val answer = 42
-```
-
-Mutable values use `var`:
-
-```uinx
-var counter = 0
-counter = counter + 1
-```
-
-## Conditions
-
-```uinx
-if value > 100:
-    return 2
-elif value > 50:
-    return 1
-else:
-    return 0
-```
-
-Logical expressions can use readable operators:
-
-```uinx
-if ready and not stopped:
-    start()
-```
-
-## Structures
-
-```uinx
-struct Point:
-    x: i32
-    y: i32
-```
-
-Create values with `new`:
-
-```uinx
-val point = new Point(x=10, y=20)
-```
-
-## Extensions
-
-Methods can be implemented with `extend`:
+Uinx keeps the machinery needed for kernels, drivers, embedded software, runtimes, and high-performance native programs without forcing ordinary code to look like punctuation-heavy C++ or Rust.
 
 ```uinx
 struct Counter:
     value: i32
 
 extend Counter:
-    func get(self: ref Self) -> i32:
-        return self.value
+    public func add(self: mutref Self, amount: i32) -> unit:
+        self.value += amount
+        return
 
-    func set(self: mutref Self, value: i32) -> unit:
-        self.value = value
-```
-
-Usage:
-
-```uinx
 func main() -> i32:
     var counter = new Counter(value=40)
-
-    counter.set(42)
-
-    return counter.get() - 42
+    counter.add(2)
+    return counter.value - 42
 ```
 
----
+The compiler pipeline is native:
 
-# `need` and `dontneed`
+```text
+Source → Lexer → Parser → AST → Name/Type/Trait Analysis
+       → Ownership/Borrow Check → MIR → Optimization → LLVM → Object/ELF
+```
 
-Uinx lets source code explicitly describe the environment it needs.
+Uinx does not transpile programs to C or C++.
+
+## Language at a glance
+
+| Area | Uinx 0.3 |
+|---|---|
+| Blocks | indentation + `:` |
+| Immutable / mutable | `val` / `var` |
+| Functions | `func name(...) -> Type:` |
+| Structures | `struct`, `new`, `extend` |
+| Generics | `Name[T]`, `func f[T](...)` |
+| Traits | `trait`, `extend Type with Trait` |
+| References | `ref T`, `mutref T` |
+| Raw pointers | `ptr T`, `mutptr T` |
+| Ownership | move + borrow checking + RAII |
+| Unsafe boundary | `unsafe func`, `unsafe:` |
+| C ABI | `extern "C" func` |
+| Assembly | native LLVM inline `asm()` |
+| Async | `async func`, `await` |
+| Freestanding | `dontneed std`, `need core` |
+| SMP | `concurrent`, `shared`, `percpu`, `smp` |
+
+### Control flow
+
+```uinx
+func sum_without_two() -> i32:
+    var total: i32 = 0
+
+    for i in 0 .. 6:
+        if i == 2:
+            continue
+        total += i
+
+    loop:
+        if total >= 13:
+            break
+        total += 1
+
+    return total
+```
+
+`while`, `if / elif / else`, `scope`, `return`, `break`, and `continue` are also implemented.
+
+### Globals and bit operations
+
+```uinx
+const PAGE_SHIFT: u64 = 12
+static var flags: u64 = 0
+
+func enable_page_flag() -> unit:
+    flags |= 1 << PAGE_SHIFT
+    flags &= ~((1 as u64) << 2)
+    return
+```
+
+## `need` and `dontneed`
+
+Source code states what environment it needs:
 
 ```uinx
 need std
 ```
 
-Or:
-
-```uinx
-need core
-```
-
-For freestanding software:
+A kernel instead starts with:
 
 ```uinx
 dontneed std
 need core
 ```
 
-Components can also be explicitly disabled:
+`dontneed runtime` prevents the hosted runtime archive from being linked. `dontneed dependency_name` excludes a direct manifest path dependency. The old `no_std;` spelling is only a migration alias.
 
-```uinx
-dontneed runtime
-```
+# OS-first SMP model
 
-The intent is simple:
-
-```text
-need X
-```
-
-means:
-
-> This program needs X.
-
-while:
-
-```text
-dontneed X
-```
-
-means:
-
-> Do not include or link X.
-
-This replaces special-case syntax such as `no_std`.
-
----
-
-# References and pointers
-
-Safe references are written explicitly:
-
-```uinx
-ref T
-mutref T
-```
-
-Raw pointers use:
-
-```uinx
-ptr T
-mutptr T
-```
-
-Borrowing is readable:
-
-```uinx
-val reference = borrow value
-```
-
-Mutable borrowing:
-
-```uinx
-val reference = borrow mut value
-```
-
-Dereferencing:
-
-```uinx
-val value = deref pointer
-```
-
-The distinction between safe references and raw pointers remains visible in source code.
-
----
-
-# Generics
-
-Generic types use brackets:
-
-```uinx
-Vec[i32]
-```
-
-Generic functions:
-
-```uinx
-func identity[T](value: T) -> T:
-    return value
-```
-
-Explicit specialization:
-
-```uinx
-val result = identity[i32](42)
-```
-
----
-
-# C FFI
-
-Uinx can directly call C ABI functions.
-
-```uinx
-extern "C" func abs(value: i32) -> i32
-
-func main() -> i32:
-    return abs(-1) - 1
-```
-
-C interoperability is a first-class part of the language rather than an external transpilation layer.
-
----
-
-# Unsafe code
-
-Operations that cannot be verified by the safe language can be placed behind `unsafe`.
-
-This includes functionality such as:
-
-- raw pointer access
-- low-level hardware operations
-- foreign interfaces
-- architecture-specific operations
-- inline assembly
-
-Safe Uinx code remains separate from explicitly unsafe operations.
-
----
-
-# Inline assembly
-
-Uinx supports real native inline assembly through the compiler backend.
-
-It is intended for:
-
-- kernels
-- boot code
-- interrupt handling
-- device drivers
-- architecture support
-- highly specialized low-level routines
-
-Assembly is lowered through LLVM rather than interpreted or emulated by the language.
-
----
-
-# Compiler architecture
-
-Uinx uses a native compiler pipeline:
-
-```text
-Source
-  │
-  ▼
-Lexer
-  │
-  ▼
-Indentation-aware Parser
-  │
-  ▼
-AST
-  │
-  ▼
-Name Resolution
-  │
-  ▼
-Type Checking
-  │
-  ▼
-Trait Checking
-  │
-  ▼
-Ownership / Borrow Checking
-  │
-  ▼
-MIR
-  │
-  ▼
-Optimization
-  │
-  ▼
-LLVM IR
-  │
-  ▼
-Object Code
-  │
-  ▼
-Linker
-  │
-  ▼
-Native Executable
-```
-
-Uinx does **not** translate programs into C or C++ before compilation.
-
----
-
-# Standard library
-
-The standard library is divided into layers:
-
-```text
-core
- │
- ▼
-alloc
- │
- ▼
-minimal
- │
- ▼
-std
-```
-
-### `core`
-
-Fundamental language and freestanding facilities.
-
-```uinx
-need core
-```
-
-### `alloc`
-
-Allocation-related facilities.
-
-```uinx
-need alloc
-```
-
-### `minimal`
-
-A small runtime and I/O layer for constrained environments.
-
-```uinx
-need minimal
-```
-
-### `std`
-
-The hosted standard-library layer.
-
-```uinx
-need std
-```
-
-For kernels, drivers, bare metal, and other freestanding targets:
+Uinx 0.3 adds a compiler-visible concurrency model aimed at kernels rather than a blanket "make everything seq_cst" switch.
 
 ```uinx
 dontneed std
 need core
+smp auto
+
+shared var online_cpus: u64 = 0
+
+func account_cpu() -> unit:
+    online_cpus += 1
+    return
+
+public unsafe concurrent func secondary_cpu_entry() -> unit:
+    account_cpu()
+    return
 ```
 
----
+`concurrent` propagates through the call graph, so helpers called by a concurrent entry are analyzed as concurrent too. In `smp auto`, mutable atomic-compatible globals/fields reached by those paths can be promoted to atomic access automatically.
 
-# Building Uinx
+### SMP policies
 
-## Requirements
+```uinx
+smp auto       # default: infer + acquire/release/acq_rel
+smp manual     # no implicit atomic promotion
+smp strict     # infer + seq_cst generated atomics
+```
 
-You need:
+The CLI can override source policy:
 
-- CMake
-- a C++20 compiler
-- LLVM development files
-- a supported system linker
+```sh
+uinx check --smp=manual
+uinx build --smp=strict
+```
 
-Configure:
+Explicit barriers are available when a protocol requires them:
+
+```uinx
+fence acquire
+fence release
+fence acq_rel
+fence seq_cst
+
+compiler_fence acquire
+```
+
+For multi-field invariants the compiler does not pretend that independent atomics are enough. Use explicit shared fields, `SpinLock`, per-CPU data, or a protocol appropriate to the kernel subsystem.
+
+### Per-CPU data
+
+```uinx
+percpu var local_ticks: u64 = 0
+```
+
+`percpu` lowers to local-exec TLS and is intentionally excluded from automatic atomic strengthening. Bare-metal kernels must initialize the per-CPU TLS/thread-pointer base before using it on each CPU.
+
+# Write a bare-metal kernel
+
+Create a complete starter project:
+
+```sh
+uinx new mykernel --kernel=x86_64
+cd mykernel
+uinx build --release
+```
+
+Also implemented:
+
+```sh
+uinx new mykernel --kernel=aarch64
+uinx new mykernel --kernel=riscv64
+```
+
+The generator creates architecture startup assembly, a linker script, a freestanding `uinx.toml`, and a Uinx kernel entry. The result is:
+
+```text
+target/release/mykernel.elf
+```
+
+Kernel source uses a dedicated entry rather than hosted `main()`:
+
+```uinx
+dontneed std
+need core
+smp auto
+
+shared var online_cpus: u64 = 0
+
+public unsafe concurrent func kernel_main() -> unit:
+    online_cpus += 1
+    return
+```
+
+The starter `_start` establishes an early stack, calls `kernel_main`, and enters the target idle loop if it returns. Boot-protocol integration (UEFI, Limine, Multiboot, SBI/device tree, and so on) remains a platform choice rather than hidden compiler behavior.
+
+## Freestanding `core`
+
+Uinx 0.3 includes OS-oriented primitives that compile without libc/host runtime on the verified bare-metal paths:
+
+- `core::mem`: pure-Uinx `memcpy`, `memmove`, `memset`, byte-copy/move/fill;
+- `core::ptr`: volatile `u8/u32/u64` MMIO loads and stores;
+- `core::atomic`: compiler-lowered `AtomicU64` operations;
+- `core::sync`: a freestanding `SpinLock`;
+- typed raw-pointer arithmetic and `deref (...) = value` for allocators, page tables, DMA buffers, and memory code.
+
+```uinx
+public unsafe func clear(base: mutptr u8, size: usize) -> unit:
+    var i: usize = 0 as usize
+    while i < size:
+        deref (base + i) = 0
+        i += 1 as usize
+    return
+```
+
+# Performance
+
+The MIR optimizer now performs more than unreachable-block cleanup. At optimization levels that enable it, Uinx runs local-load forwarding, integer/boolean constant folding, and dead pure-SSA value elimination before LLVM optimization.
+
+Concurrency strengthening also avoids unnecessary contention: `percpu` stays CPU-local, `smp auto` uses acquire/release/acq_rel rather than forcing seq_cst everywhere, and `smp manual` can disable all implicit promotion when a kernel wants to own the memory model explicitly.
+
+# Build Uinx
+
+Requirements include CMake, a C++20 compiler, LLVM development files, Clang for the tested package link flow, and LLD for bare-metal kernel linking.
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-```
-
-Build:
-
-```sh
 cmake --build build -j
-```
-
-Run the test suite:
-
-```sh
 ctest --test-dir build --output-on-failure
 ```
 
----
-
-# Compiling a Uinx program
-
-Compile directly with the compiler:
+Direct compiler use:
 
 ```sh
-build/uinxc examples/hello.ux -o hello
+build/uinxc source.ux --emit=check
+build/uinxc source.ux --emit=obj -o source.o
 ```
 
-Run:
-
-```sh
-./hello
-```
-
----
-
-# Package tool
-
-Create a project:
+Package workflow:
 
 ```sh
 build/uinx new app
-```
-
-Enter it:
-
-```sh
 cd app
-```
-
-Check the project:
-
-```sh
 ../build/uinx check
+../build/uinx build
+../build/uinx run
 ```
 
-The package tool provides commands including:
-
-```text
-uinx new
-uinx build
-uinx run
-uinx check
-uinx test
-uinx fmt
-uinx lint
-uinx doc
-uinx fetch
-uinx add
-```
-
----
+Main commands include `new`, `build`, `run`, `check`, `test`, `fmt`, `lint`, `doc`, `fetch`, and `add`.
 
 # Formatting
 
-The repository contains a canonical:
-
-```text
-.clang-format
-```
-
-If `clang-format` is installed:
+The repository ships a canonical `.clang-format`:
 
 ```sh
 cmake --build build --target format
-```
-
-Check formatting without modifying files:
-
-```sh
 cmake --build build --target format-check
 ```
 
-Uinx source itself can be formatted with:
+Uinx source can be formatted with:
 
 ```sh
 uinx fmt
 ```
 
----
-
-# Repository layout
-
-```text
-Uinx-Language/
-├── benchmarks/
-├── cmake/
-├── docs/
-├── examples/
-│   └── baremetal/
-├── fuzz/
-├── include/
-│   └── uinx/
-├── runtime/
-├── src/
-├── stdlib/
-│   ├── core/
-│   ├── alloc/
-│   ├── minimal/
-│   └── std/
-├── tests/
-│   ├── unit/
-│   ├── conformance/
-│   ├── safety/
-│   ├── codegen/
-│   └── runtime/
-├── tools/
-├── verification/
-├── ARCHITECTURE.md
-├── CMakeLists.txt
-├── LICENSE
-└── README.md
-```
-
----
-
-# Tests
-
-The test suite is organized by purpose rather than as a collection of demonstration files.
-
-```text
-tests/
-├── unit/                 Compiler and runtime unit tests
-├── conformance/
-│   ├── pass/             Programs that must compile
-│   └── fail/             Programs that must be rejected
-├── safety/
-│   └── borrow-fail/      Ownership and borrowing rejection tests
-├── codegen/
-│   └── asm/              Inline assembly / backend tests
-├── runtime/              Executable runtime tests
-└── support/              Native test support code
-```
-
-Negative tests can require specific compiler diagnostics so that a test does not accidentally pass simply because compilation failed for an unrelated reason.
-
----
-
 # Documentation
 
-More detailed documentation is available in:
-
-| Document | Purpose |
+| Document | Contents |
 |---|---|
-| `ARCHITECTURE.md` | Compiler architecture |
-| `docs/LANGUAGE_SPEC.md` | Language specification |
-| `docs/UNSAFE_AND_ASM.md` | Unsafe and inline assembly rules |
-| `docs/VERIFICATION.md` | Verification and testing |
-| `tests/README.md` | Test-suite organization |
-
----
-
-# Philosophy
-
-Uinx does not try to make systems programming look complicated just because the underlying machine is complicated.
-
-The language aims for code that reads naturally:
-
-```uinx
-dontneed std
-need core
-
-func max(a: i32, b: i32) -> i32:
-    if a > b:
-        return a
-
-    return b
-```
-
-while still retaining the facilities required to build:
-
-- operating systems
-- kernels
-- device drivers
-- boot software
-- embedded systems
-- runtimes
-- native libraries
-- high-performance applications
-
-Readable syntax should not require giving up control over the machine.
-
----
+| `docs/LANGUAGE_SPEC.md` | canonical implemented syntax |
+| `docs/MEMORY_MODEL.md` | ownership, atomics, SMP modes, fences, per-CPU rules |
+| `docs/OS_DEVELOPMENT.md` | bare-metal kernel workflow |
+| `docs/UNSAFE_AND_ASM.md` | unsafe and inline assembly |
+| `docs/STANDARD_LIBRARY.md` | core/alloc/minimal/std layers |
+| `docs/VERIFICATION.md` | release verification scope |
+| `docs/RELEASE_STATUS.md` | implemented vs unverified boundaries |
 
 # License
 
-Uinx is distributed under the **BSD 3-Clause License**.
-
-See [`LICENSE`](LICENSE) for the complete license text.
+Uinx is released under the **BSD 3-Clause License**.
 
 ```text
 Copyright (c) 2026 ViudiraTech
+Code by JiTianYu391
 ```
 
-Source code attribution:
-
-```text
-By JiTianYu391
-```
-
----
+See [`LICENSE`](LICENSE) for the complete license text.
 
 <div align="center">
 
-### Uinx
-
-**Simple to read. Close to the machine.**
-
-Copyright © 2026 **ViudiraTech**  
-Code by **JiTianYu391**
+**Uinx — readable enough for application code, explicit enough for a kernel.**
 
 </div>

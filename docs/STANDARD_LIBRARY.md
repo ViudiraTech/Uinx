@@ -1,29 +1,39 @@
 # Uinx Standard Library Layers
 
-**by JiTianYu391**
+**Copyright © 2026 ViudiraTech · Code by JiTianYu391**
 
-The source tree is split so freestanding projects do not need to import hosted facilities.
+The source tree is split so a kernel can use low-level language facilities without pulling in libc or the hosted runtime.
 
 ## `core`
 
-`stdlib/core` contains `Option`, `Result`, iterator traits, immutable/mutable slice layouts, atomics, pointer/volatile functions, byte memory primitives and foundational traits including Copy, Drop, Send and Sync.
+`stdlib/core` is the freestanding foundation. It contains `Option`, `Result`, iterator and foundational traits, slice layouts, raw-pointer/volatile access, atomics, byte-memory routines, and synchronization primitives.
 
-`core` source is marked `dontneed std` and has no OS allocation policy. Some low-level functions are declarations against the runtime ABI when used in hosted tests; a freestanding environment may provide its own ABI definitions.
+### `core::mem`
+
+`memcpy`, `memmove`, and `memset` are implemented in Uinx itself with typed raw-pointer arithmetic and dereference. The verified bare-metal paths do not require libc or hosted `uinx_mem*` hooks for these operations.
+
+### `core::ptr`
+
+Volatile `u8/u32/u64` read/write wrappers call compiler-recognized intrinsics that lower directly to LLVM volatile loads/stores. These are intended for MMIO and other explicitly volatile memory.
+
+### `core::atomic`
+
+`AtomicU64` exposes relaxed/acquire/release/acq_rel/compare-exchange operations. Compiler-recognized atomic ABI calls lower directly to LLVM atomic instructions in the verified freestanding paths.
+
+### `core::sync`
+
+`SpinLock` is a small freestanding lock built on `AtomicU64`. Kernels may wrap it with their own interrupt/preemption/lockdep/NUMA policy.
 
 ## `alloc`
 
-`stdlib/alloc` defines Box, Vec/RawVec, String, Rc, Arc, HashMap and collection layouts. The C runtime provides allocator hooks, dynamically growing raw-vector storage, atomic Arc control blocks and an open-addressing hash map.
-
-The raw runtime storage implementations are exercised by `runtime-unit`. Rich typed convenience methods for every collection operation and generic Drop specialization in all combinations remain `UNVERIFIED`.
+`stdlib/alloc` defines Box, Vec/RawVec, String, Rc, Arc, HashMap and collection layouts. Hosted allocation is backed by runtime hooks. A bare-metal OS is expected to provide an allocator policy before using facilities that require dynamic allocation.
 
 ## `minimal`
 
-`stdlib/minimal` exposes a cuttable hosted layer for file I/O, monotonic time, mutex synchronization, yielding/threads and socket operations. The backing POSIX implementations are present in `runtime/`.
+`stdlib/minimal` is a cuttable hosted layer for file I/O, monotonic time, mutex synchronization, yielding/threads, and socket operations. Its current runtime backing is POSIX-oriented.
 
 ## `std`
 
-`stdlib/std` layers process spawning/waiting, pipes/IPC, async executor ABI, UTF-8 utilities, file/socket/thread handles and collection facade types on top of lower layers.
+`stdlib/std` layers process spawning/waiting, pipes/IPC, async executor ABI, UTF-8 utilities, file/socket/thread handles, and collection facade types on top of lower layers.
 
-The hosted runtime tests cover process spawn/wait, pipe I/O, mutexes, threads, file-adjacent primitives, sockets at the ABI implementation level, UTF-8, atomics, volatile memory, Vec, Arc and HashMap.
-
-Complete Windows behavior is `UNVERIFIED`; unsupported Windows runtime branches return platform errors rather than pretending success. Full Unicode normalization/collation, TLS, DNS, advanced filesystem metadata, a production async network reactor and every collection algorithm are `UNVERIFIED`.
+Complete Windows behavior, full Unicode normalization/collation, TLS/DNS service stacks, a production async reactor, and every collection algorithm remain outside the verified release surface.

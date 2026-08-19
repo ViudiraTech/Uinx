@@ -1,12 +1,12 @@
 # Release Verification
 
-**by JiTianYu391**
+**Copyright © 2026 ViudiraTech · Code by JiTianYu391**
 
-Validation artifacts in `verification/` must describe the current source tree. Old 0.1 logs are intentionally not carried forward as evidence for 0.2.
+Validation artifacts in `verification/` must describe the current source tree. Old release logs are not treated as evidence for 0.3; verification artifacts must be regenerated from this source tree.
 
 ## Test suite
 
-The Uinx 0.2 CTest suite contains 18 tests:
+The Uinx 0.3 CTest suite contains 18 top-level tests:
 
 1. compiler unit tests
 2. runtime unit tests
@@ -25,9 +25,9 @@ The Uinx 0.2 CTest suite contains 18 tests:
 15. compile-pass conformance corpus
 16. compile-fail conformance corpus with exact expected diagnostics
 17. borrow-fail safety corpus with exact expected diagnostics
-18. two-package tooling integration
+18. package tooling integration, including x86-64/AArch64/RISC-V64 kernel scaffolds and SMP policy overrides
 
-The canonical test sources use the indentation-based 0.2 syntax rather than the migration aliases.
+The canonical test sources use the indentation-based 0.3 syntax rather than the migration aliases.
 
 ## Standard library aggregate check
 

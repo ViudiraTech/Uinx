@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+dontneed std
+smp auto
+
+shared var online_cpus: u64 = 0
+percpu var local_ticks: u64 = 0
+
+func account_tick() -> unit:
+    online_cpus += 1
+    local_ticks += 1
+    return
+
+public unsafe concurrent func secondary_cpu_entry() -> unit:
+    account_tick()
+    compiler_fence release
+    fence acq_rel
+    return

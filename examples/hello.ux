@@ -2,8 +2,6 @@
 # Copyright (c) 2026 ViudiraTech
 # By JiTianYu391
 
-extern "C" func puts(text: ref str) -> i32
-
 func main() -> i32:
-    puts("Hello, world!")
-    return 0
+    val answer = 40 + 2
+    return answer - 42

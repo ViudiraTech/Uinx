@@ -3,6 +3,8 @@
 # By JiTianYu391
 
 # Uinx core::ptr
+# Volatile ABI calls are lowered directly to LLVM volatile accesses, so these
+# wrappers are usable in freestanding kernels without the hosted runtime.
 dontneed std
 
 unsafe extern "C" func uinx_volatile_load_u8(ptr: ptr u8) -> u8
@@ -12,9 +14,23 @@ unsafe extern "C" func uinx_volatile_store_u8(ptr: mutptr u8, value: u8) -> unit
 unsafe extern "C" func uinx_volatile_store_u32(ptr: mutptr u32, value: u32) -> unit
 unsafe extern "C" func uinx_volatile_store_u64(ptr: mutptr u64, value: u64) -> unit
 
+public unsafe func read_volatile_u8(ptr: ptr u8) -> u8:
+    return uinx_volatile_load_u8(ptr)
+
 public unsafe func read_volatile_u32(ptr: ptr u32) -> u32:
     return uinx_volatile_load_u32(ptr)
 
+public unsafe func read_volatile_u64(ptr: ptr u64) -> u64:
+    return uinx_volatile_load_u64(ptr)
+
+public unsafe func write_volatile_u8(ptr: mutptr u8, value: u8) -> unit:
+    uinx_volatile_store_u8(ptr, value)
+    return
+
 public unsafe func write_volatile_u32(ptr: mutptr u32, value: u32) -> unit:
     uinx_volatile_store_u32(ptr, value)
+    return
+
+public unsafe func write_volatile_u64(ptr: mutptr u64, value: u64) -> unit:
+    uinx_volatile_store_u64(ptr, value)
     return

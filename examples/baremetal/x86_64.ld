@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: BSD-3-Clause
- * Copyright (c) 2026 JiTianYu391
+ * Copyright (c) 2026 ViudiraTech
+ * By JiTianYu391
  */
 
 ENTRY(_start)

@@ -1,5 +1,21 @@
 # Changelog
 
+## Uinx 0.3.0 — 2026-08-19
+
+**Copyright © 2026 ViudiraTech · Code by JiTianYu391**
+
+- Added `const`, `static`, `for`, `loop`, `break`, `continue`, bitwise/shift operations and their compound assignments to the canonical indentation syntax.
+- Added the OS SMP language model: `concurrent`, `shared`, `percpu`, `smp auto/manual/strict`, `fence`, and `compiler_fence`.
+- Added call-graph propagation from concurrent entries and automatic promotion of compatible mutable globals/fields to atomic storage.
+- Added LLVM atomic load/store/RMW/fence lowering with acquire/release/acq_rel automatic ordering and seq_cst strict mode.
+- Added local-exec TLS lowering for `percpu` state.
+- Added compiler-lowered freestanding volatile and atomic intrinsics plus pure-Uinx `memcpy`, `memmove`, and `memset`.
+- Added a freestanding `SpinLock` and fixed typed raw-pointer arithmetic and raw-pointer dereference assignment.
+- Added `uinx new <name> --kernel=x86_64|aarch64|riscv64` with startup assembly, linker script, freestanding core selection and static ELF linking.
+- Added RISC-V kernel `medany` code-model support for the high starter load address.
+- Added MIR local-load forwarding, constant folding and dead SSA-value elimination.
+- Extended conformance/unit/package integration tests for the new language, optimizer, SMP modes, automatic atomics, per-CPU TLS and three-architecture kernel projects.
+
 ## Uinx 0.2.0 — 2026-08-19
 
 **by JiTianYu391**

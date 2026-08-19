@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+const PAGE_SHIFT: u64 = 12
+static var flags: u64 = 0
+
+func main() -> i32:
+    flags |= 1 << PAGE_SHIFT
+    flags &= ~((1 as u64) << 2)
+    return 0

@@ -1,8 +1,17 @@
-# Uinx 0.2 Release Status
+# Uinx 0.3 Release Status
 
-**by JiTianYu391**
+**Copyright © 2026 ViudiraTech · Code by JiTianYu391**
 
 ## Verified in this release
+
+- Extended canonical syntax with `const`, `static`, `for`, `loop`, `break`, `continue`, bitwise/shift operators and compound assignments.
+- OS-aware SMP model with `concurrent`, `shared`, `percpu`, `smp auto/manual/strict`, explicit `fence` and `compiler_fence`.
+- Call-graph concurrency propagation and automatic atomic promotion for compatible mutable global/field state.
+- LLVM atomic load/store/RMW/fence lowering with acquire/release/acq_rel automatic ordering and seq_cst strict mode.
+- Freestanding `core::mem`, volatile pointer primitives, atomic primitives, and `SpinLock`.
+- Typed raw-pointer arithmetic and dereference assignment suitable for allocators, page tables and byte-memory code.
+- `uinx new <name> --kernel=<arch>` creates and cross-links x86-64, AArch64 and RISC-V64 kernel ELF projects.
+- MIR optimization now includes local load forwarding, constant folding and dead pure-SSA elimination in addition to unreachable-block removal.
 
 - Native C++20 compiler and command-line tools build in Release mode.
 - Indentation-sensitive canonical syntax with migration compatibility for the 0.1 brace syntax.
@@ -26,12 +35,12 @@
 
 The following items are intentionally not represented as passing merely because source declarations exist:
 
-- `UNVERIFIED`: formal proof that all safe Uinx programs are free of data races and every lifetime/borrow edge case.
+- `UNVERIFIED`: formal proof that all safe Uinx programs are free of data races and every lifetime/borrow edge case; automatic SMP strengthening is tested but not a theorem over unsafe/FFI/external-agent code.
 - `UNVERIFIED`: complete borrow-region solving across arbitrary irreducible CFGs and all loop/join patterns.
 - `UNVERIFIED`: generic Drop specialization for every nested generic ownership pattern and panic/unwind destruction.
 - `UNVERIFIED`: aggregate/bitfield/vector C ABI portability across all architectures and operating systems.
 - `UNVERIFIED`: allocator-free async frame placement and kernel executor integration.
-- `UNVERIFIED`: actual boot execution of produced freestanding ELFs on QEMU or hardware.
+- `UNVERIFIED`: universal boot-protocol integration and actual execution of every produced freestanding ELF on QEMU or hardware; release tests verify object generation and link-level ELF construction.
 - `UNVERIFIED`: hosted runtime behavior on Windows/macOS; current runtime validation is POSIX/Linux.
 - `UNVERIFIED`: full Unicode normalization, segmentation, collation and locale services.
 - `UNVERIFIED`: production TLS/DNS/async-I/O reactor networking layer.

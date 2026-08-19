@@ -1,21 +1,6 @@
-$ cmake -S . -B build-final -DCMAKE_BUILD_TYPE=Release
--- Configuring done (0.0s)
--- Generating done (0.0s)
--- Build files have been written to: /mnt/data/uinx_work/Uinx-Language-Release/build-final
-
+$ cmake -S . -B build-final -G Ninja -DCMAKE_BUILD_TYPE=Release
+Result: PASS
 $ cmake --build build-final -j2
-[ 21%] Built target uinx_runtime
-[ 57%] Built target uinx_compiler
-[ 64%] Built target uinx-runtime-tests
-[ 67%] Building CXX object CMakeFiles/uinxc.dir/tools/uinxc.cpp.o
-[ 71%] Building CXX object CMakeFiles/uinx.dir/tools/uinx.cpp.o
-[ 75%] Linking CXX executable uinxc
-[ 75%] Built target uinxc
-[ 78%] Linking CXX executable uinx-lsp
-[ 82%] Built target uinx-lsp
-[ 85%] Linking CXX executable uinx-compiler-bench
-[ 89%] Built target uinx-compiler-bench
-[ 92%] Linking CXX executable uinx-unit-tests
-[ 96%] Built target uinx-unit-tests
-[100%] Linking CXX executable uinx
-[100%] Built target uinx
+Result: PASS (28 build steps; 0 compiler warnings)
+$ build-final/uinx --version
+uinx 0.3.0
