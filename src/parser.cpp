@@ -12,36 +12,46 @@ std::string TypeRef::str() const {
     std::string out;
     if (!prefixes.empty()) {
         for (const auto& prefix : prefixes) {
-            if (prefix == "&") out += "ref ";
-            else if (prefix == "&mut") out += "mutref ";
-            else if (prefix == "*const") out += "ptr ";
-            else if (prefix == "*mut") out += "mutptr ";
-            else out += prefix + " ";
+            if (prefix == "&")
+                out += "ref ";
+            else if (prefix == "&mut")
+                out += "mutref ";
+            else if (prefix == "*const")
+                out += "ptr ";
+            else if (prefix == "*mut")
+                out += "mutptr ";
+            else
+                out += prefix + " ";
         }
     } else {
-        if (is_ref) out += is_mut_ref ? "mutref " : "ref ";
-        if (is_raw_ptr) out += raw_mut ? "mutptr " : "ptr ";
+        if (is_ref)
+            out += is_mut_ref ? "mutref " : "ref ";
+        if (is_raw_ptr)
+            out += raw_mut ? "mutptr " : "ptr ";
     }
 
     out += name;
     if (!args.empty()) {
         out += '[';
         for (std::size_t i = 0; i < args.size(); ++i) {
-            if (i != 0) out += ", ";
+            if (i != 0)
+                out += ", ";
             out += args[i].str();
         }
         out += ']';
     }
-    if (nullable) out += '?';
+    if (nullable)
+        out += '?';
     return out;
 }
 
-}  // namespace uinx::ast
+} // namespace uinx::ast
 
 namespace uinx {
 
 Parser::Parser(std::vector<Token> tokens, Diagnostics& diagnostics)
-    : toks_(std::move(tokens)), diags_(diagnostics) {}
+    : toks_(std::move(tokens)), diags_(diagnostics) {
+}
 
 const Token& Parser::peek(std::size_t n) const {
     const auto index = std::min(pos_ + n, toks_.size() - 1);
@@ -53,35 +63,44 @@ bool Parser::at(TokenKind kind) const {
 }
 
 bool Parser::consume(TokenKind kind) {
-    if (!at(kind)) return false;
+    if (!at(kind))
+        return false;
     ++pos_;
     return true;
 }
 
 const Token& Parser::advance() {
     const Token& token = peek();
-    if (pos_ < toks_.size() - 1) ++pos_;
+    if (pos_ < toks_.size() - 1)
+        ++pos_;
     return token;
 }
 
 Token Parser::expect(TokenKind kind, std::string_view what) {
-    if (at(kind)) return advance();
+    if (at(kind))
+        return advance();
     const Token token = peek();
-    diags_.error(token.range, "E0100",
-                 "expected " + std::string(what) + ", found " + std::string(token_name(token.kind)));
+    diags_.error(token.range,
+                 "E0100",
+                 "expected " + std::string(what) + ", found " +
+                     std::string(token_name(token.kind)));
     return token;
 }
 
 Token Parser::expect_name(std::string_view what) {
-    if (at(TokenKind::Identifier) || at(TokenKind::KwPtr)) return advance();
+    if (at(TokenKind::Identifier) || at(TokenKind::KwPtr))
+        return advance();
     const Token token = peek();
-    diags_.error(token.range, "E0100",
-                 "expected " + std::string(what) + ", found " + std::string(token_name(token.kind)));
+    diags_.error(token.range,
+                 "E0100",
+                 "expected " + std::string(what) + ", found " +
+                     std::string(token_name(token.kind)));
     return token;
 }
 
 void Parser::skip_newlines() {
-    while (consume(TokenKind::Newline)) {}
+    while (consume(TokenKind::Newline)) {
+    }
 }
 
 void Parser::finish_line() {
@@ -93,14 +112,17 @@ void Parser::finish_line() {
         skip_newlines();
         return;
     }
-    if (at(TokenKind::Dedent) || at(TokenKind::RBrace) || at(TokenKind::End)) return;
+    if (at(TokenKind::Dedent) || at(TokenKind::RBrace) || at(TokenKind::End))
+        return;
     diags_.error(peek().range, "E0111", "expected end of line");
 }
 
 void Parser::synchronize_item() {
     while (!at(TokenKind::End)) {
-        if (consume(TokenKind::Newline) || consume(TokenKind::Semicolon)) return;
-        if (at(TokenKind::Dedent)) return;
+        if (consume(TokenKind::Newline) || consume(TokenKind::Semicolon))
+            return;
+        if (at(TokenKind::Dedent))
+            return;
         if (at(TokenKind::KwFn) || at(TokenKind::KwStruct) || at(TokenKind::KwTrait) ||
             at(TokenKind::KwImpl) || at(TokenKind::KwPub) || at(TokenKind::KwNeed) ||
             at(TokenKind::KwDontNeed)) {
@@ -111,7 +133,8 @@ void Parser::synchronize_item() {
 }
 
 Parser::Suite Parser::begin_suite() {
-    if (consume(TokenKind::LBrace)) return {true};
+    if (consume(TokenKind::LBrace))
+        return {true};
     expect(TokenKind::Colon, "':' before an indented block");
     expect(TokenKind::Newline, "a newline after ':'");
     skip_newlines();
@@ -127,8 +150,10 @@ bool Parser::suite_done(const Suite& suite) {
 }
 
 void Parser::end_suite(const Suite& suite) {
-    if (suite.braces) expect(TokenKind::RBrace, "'}'");
-    else expect(TokenKind::Dedent, "end of indented block");
+    if (suite.braces)
+        expect(TokenKind::RBrace, "'}'");
+    else
+        expect(TokenKind::Dedent, "end of indented block");
     skip_newlines();
 }
 
@@ -141,7 +166,8 @@ std::string Parser::parse_requirement_name() {
         }
         return name;
     }
-    if (at(TokenKind::String)) return advance().text;
+    if (at(TokenKind::String))
+        return advance().text;
     diags_.error(peek().range, "E0112", "need/dontneed requires a component name");
     return {};
 }
@@ -149,28 +175,37 @@ std::string Parser::parse_requirement_name() {
 void Parser::parse_requirement(ast::Module& module, bool disabled) {
     const Token directive = advance();
     std::string name;
-    if (directive.text == "no_std") name = "std";
-    else name = parse_requirement_name();
+    if (directive.text == "no_std")
+        name = "std";
+    else
+        name = parse_requirement_name();
 
     if (!name.empty()) {
         auto& current = disabled ? module.dontneeds : module.needs;
         auto& opposite = disabled ? module.needs : module.dontneeds;
         if (std::find(opposite.begin(), opposite.end(), name) != opposite.end()) {
-            diags_.error(directive.range, "E0113",
+            diags_.error(directive.range,
+                         "E0113",
                          "component '" + name + "' cannot be both needed and disabled");
         }
-        if (std::find(current.begin(), current.end(), name) == current.end()) current.push_back(name);
-        if (disabled && name == "std") module.no_std = true;
+        if (std::find(current.begin(), current.end(), name) == current.end())
+            current.push_back(name);
+        if (disabled && name == "std")
+            module.no_std = true;
     }
     finish_line();
 }
 
 void Parser::parse_smp_mode(ast::Module& module) {
     const Token keyword = advance();
-    if (consume(TokenKind::KwAuto)) module.smp_mode = ast::SmpMode::Auto;
-    else if (consume(TokenKind::KwManual)) module.smp_mode = ast::SmpMode::Manual;
-    else if (consume(TokenKind::KwStrict)) module.smp_mode = ast::SmpMode::Strict;
-    else diags_.error(peek().range, "E0114", "smp expects auto, manual, or strict");
+    if (consume(TokenKind::KwAuto))
+        module.smp_mode = ast::SmpMode::Auto;
+    else if (consume(TokenKind::KwManual))
+        module.smp_mode = ast::SmpMode::Manual;
+    else if (consume(TokenKind::KwStrict))
+        module.smp_mode = ast::SmpMode::Strict;
+    else
+        diags_.error(peek().range, "E0114", "smp expects auto, manual, or strict");
     (void)keyword;
     finish_line();
 }
@@ -205,7 +240,8 @@ ast::TypeRef Parser::parse_type() {
             continue;
         }
         if (consume(TokenKind::Star)) {
-            if (consume(TokenKind::KwMut)) type.prefixes.push_back("*mut");
+            if (consume(TokenKind::KwMut))
+                type.prefixes.push_back("*mut");
             else {
                 expect(TokenKind::KwConst, "const or mut after '*'");
                 type.prefixes.push_back("*const");
@@ -241,7 +277,8 @@ std::vector<ast::TypeRef> Parser::parse_type_arguments(TokenKind open, TokenKind
     if (!at(close)) {
         for (;;) {
             args.push_back(parse_type());
-            if (!consume(TokenKind::Comma) || at(close)) break;
+            if (!consume(TokenKind::Comma) || at(close))
+                break;
         }
     }
     expect(close, "end of generic argument list");
@@ -250,9 +287,12 @@ std::vector<ast::TypeRef> Parser::parse_type_arguments(TokenKind open, TokenKind
 
 std::vector<ast::GenericParam> Parser::parse_generics() {
     TokenKind close;
-    if (consume(TokenKind::LBracket)) close = TokenKind::RBracket;
-    else if (consume(TokenKind::Less)) close = TokenKind::Greater;
-    else return {};
+    if (consume(TokenKind::LBracket))
+        close = TokenKind::RBracket;
+    else if (consume(TokenKind::Less))
+        close = TokenKind::Greater;
+    else
+        return {};
 
     std::vector<ast::GenericParam> params;
     while (!at(close) && !at(TokenKind::End)) {
@@ -267,7 +307,8 @@ std::vector<ast::GenericParam> Parser::parse_generics() {
         }
         param.range.end = peek().range.begin;
         params.push_back(std::move(param));
-        if (!consume(TokenKind::Comma)) break;
+        if (!consume(TokenKind::Comma))
+            break;
     }
     expect(close, "end of generic parameter list");
     return params;
@@ -280,7 +321,8 @@ ast::Param Parser::parse_parameter() {
     if (at(TokenKind::Amp) || at(TokenKind::AmpMut)) {
         const bool mut_self = at(TokenKind::AmpMut);
         advance();
-        if (!mut_self) consume(TokenKind::KwMut);
+        if (!mut_self)
+            consume(TokenKind::KwMut);
         const Token self = expect(TokenKind::KwSelf, "self after reference receiver");
         param.name = self.text;
         param.type.name = "Self";
@@ -308,7 +350,8 @@ ast::Param Parser::parse_parameter() {
     return param;
 }
 
-ast::FunctionDecl Parser::parse_function(bool pub, bool unsafe_, bool async_, bool extern_, bool concurrent_, std::string abi) {
+ast::FunctionDecl Parser::parse_function(
+    bool pub, bool unsafe_, bool async_, bool extern_, bool concurrent_, std::string abi) {
     ast::FunctionDecl function;
     function.is_pub = pub;
     function.is_unsafe = unsafe_;
@@ -328,8 +371,10 @@ ast::FunctionDecl Parser::parse_function(bool pub, bool unsafe_, bool async_, bo
         } while (consume(TokenKind::Comma));
     }
     expect(TokenKind::RParen, "')'");
-    if (consume(TokenKind::Arrow)) function.return_type = parse_type();
-    else function.return_type.name = "unit";
+    if (consume(TokenKind::Arrow))
+        function.return_type = parse_type();
+    else
+        function.return_type.name = "unit";
 
     if (extern_ && (at(TokenKind::Newline) || at(TokenKind::Semicolon) || at(TokenKind::End))) {
         finish_line();
@@ -362,7 +407,8 @@ ast::StructDecl Parser::parse_struct(bool pub) {
         structure.fields.push_back(std::move(field));
 
         if (suite.braces) {
-            if (!consume(TokenKind::Comma)) consume(TokenKind::Semicolon);
+            if (!consume(TokenKind::Comma))
+                consume(TokenKind::Semicolon);
         } else {
             finish_line();
         }
@@ -395,13 +441,17 @@ ast::TraitDecl Parser::parse_trait(bool pub) {
             } while (consume(TokenKind::Comma));
         }
         expect(TokenKind::RParen, "')'");
-        if (consume(TokenKind::Arrow)) method.return_type = parse_type();
-        else method.return_type.name = "unit";
+        if (consume(TokenKind::Arrow))
+            method.return_type = parse_type();
+        else
+            method.return_type.name = "unit";
         method.range.end = peek().range.begin;
         trait.methods.push_back(std::move(method));
 
-        if (suite.braces) expect(TokenKind::Semicolon, "';'");
-        else finish_line();
+        if (suite.braces)
+            expect(TokenKind::Semicolon, "';'");
+        else
+            finish_line();
     }
     end_suite(suite);
     trait.range.end = peek().range.begin;
@@ -439,11 +489,16 @@ ast::ImplDecl Parser::parse_impl() {
         bool unsafe_ = false;
         bool async_ = false;
         bool concurrent_ = false;
-        while (at(TokenKind::KwPub) || at(TokenKind::KwUnsafe) || at(TokenKind::KwAsync) || at(TokenKind::KwConcurrent)) {
-            if (consume(TokenKind::KwPub)) pub_ = true;
-            else if (consume(TokenKind::KwUnsafe)) unsafe_ = true;
-            else if (consume(TokenKind::KwAsync)) async_ = true;
-            else if (consume(TokenKind::KwConcurrent)) concurrent_ = true;
+        while (at(TokenKind::KwPub) || at(TokenKind::KwUnsafe) || at(TokenKind::KwAsync) ||
+               at(TokenKind::KwConcurrent)) {
+            if (consume(TokenKind::KwPub))
+                pub_ = true;
+            else if (consume(TokenKind::KwUnsafe))
+                unsafe_ = true;
+            else if (consume(TokenKind::KwAsync))
+                async_ = true;
+            else if (consume(TokenKind::KwConcurrent))
+                concurrent_ = true;
         }
         impl.methods.push_back(parse_function(pub_, unsafe_, async_, false, concurrent_));
     }
@@ -452,7 +507,8 @@ ast::ImplDecl Parser::parse_impl() {
     return impl;
 }
 
-ast::GlobalDecl Parser::parse_global(bool pub, bool is_const, bool is_static, bool is_shared, bool is_percpu) {
+ast::GlobalDecl
+Parser::parse_global(bool pub, bool is_const, bool is_static, bool is_shared, bool is_percpu) {
     ast::GlobalDecl global;
     global.is_pub = pub;
     global.is_const = is_const;
@@ -464,9 +520,12 @@ ast::GlobalDecl Parser::parse_global(bool pub, bool is_const, bool is_static, bo
         expect(TokenKind::KwConst, "const");
         global.is_mut = false;
     } else {
-        if (is_static) expect(TokenKind::KwStatic, "static");
-        if (consume(TokenKind::KwVar)) global.is_mut = true;
-        else if (consume(TokenKind::KwLet)) global.is_mut = false;
+        if (is_static)
+            expect(TokenKind::KwStatic, "static");
+        if (consume(TokenKind::KwVar))
+            global.is_mut = true;
+        else if (consume(TokenKind::KwLet))
+            global.is_mut = false;
         else {
             diags_.error(peek().range, "E0115", "global declaration requires var or val");
             global.is_mut = true;
@@ -525,7 +584,8 @@ ast::Module Parser::parse_module(std::string file) {
             } else if (consume(TokenKind::KwExtern)) {
                 extern_ = true;
                 abi = "C";
-                if (at(TokenKind::String)) abi = advance().text;
+                if (at(TokenKind::String))
+                    abi = advance().text;
                 progressed = true;
             } else if (consume(TokenKind::KwConcurrent)) {
                 concurrent_ = true;
@@ -540,7 +600,8 @@ ast::Module Parser::parse_module(std::string file) {
         }
 
         if (at(TokenKind::KwFn)) {
-            module.items.emplace_back(parse_function(pub, unsafe_, async_, extern_, concurrent_, std::move(abi)));
+            module.items.emplace_back(
+                parse_function(pub, unsafe_, async_, extern_, concurrent_, std::move(abi)));
         } else if (at(TokenKind::KwConst)) {
             module.items.emplace_back(parse_global(pub, true, false, shared_, percpu_));
         } else if (at(TokenKind::KwStatic)) {
@@ -570,7 +631,8 @@ std::unique_ptr<ast::BlockStmt> Parser::parse_block() {
     auto block = std::make_unique<ast::BlockStmt>();
     block->range.begin = peek().range.begin;
     const Suite suite = begin_suite();
-    while (!suite_done(suite)) block->stmts.push_back(parse_stmt());
+    while (!suite_done(suite))
+        block->stmts.push_back(parse_stmt());
     end_suite(suite);
     block->range.end = peek().range.begin;
     return block;
@@ -605,12 +667,17 @@ ast::StmtPtr Parser::parse_stmt() {
         const Token keyword = advance();
         auto statement = std::make_unique<ast::LetStmt>();
         statement->range.begin = keyword.range.begin;
-        if (keyword.kind == TokenKind::KwVar) statement->mut = true;
-        else if (keyword.text == "let") statement->mut = consume(TokenKind::KwMut);
+        if (keyword.kind == TokenKind::KwVar)
+            statement->mut = true;
+        else if (keyword.text == "let")
+            statement->mut = consume(TokenKind::KwMut);
         statement->name = expect(TokenKind::Identifier, "binding name").text;
-        if (consume(TokenKind::Colon)) statement->type = parse_type();
-        if (consume(TokenKind::Eq)) statement->init = parse_expr();
-        else diags_.error(peek().range, "E0103", "bindings require an initializer");
+        if (consume(TokenKind::Colon))
+            statement->type = parse_type();
+        if (consume(TokenKind::Eq))
+            statement->init = parse_expr();
+        else
+            diags_.error(peek().range, "E0103", "bindings require an initializer");
         statement->range.end = peek().range.begin;
         finish_line();
         return statement;
@@ -648,8 +715,10 @@ ast::StmtPtr Parser::parse_stmt() {
         statement->name = expect(TokenKind::Identifier, "loop variable").text;
         expect(TokenKind::KwIn, "in");
         statement->begin = parse_expr(0);
-        if (consume(TokenKind::DotDotEq)) statement->inclusive = true;
-        else expect(TokenKind::DotDot, "'..' or '..=' in for range");
+        if (consume(TokenKind::DotDotEq))
+            statement->inclusive = true;
+        else
+            expect(TokenKind::DotDot, "'..' or '..=' in for range");
         statement->end = parse_expr(0);
         statement->body = parse_block();
         statement->range.end = statement->body->range.end;
@@ -686,7 +755,8 @@ ast::StmtPtr Parser::parse_stmt() {
         statement->order = order.text;
         if (statement->order != "acquire" && statement->order != "release" &&
             statement->order != "acq_rel" && statement->order != "seq_cst") {
-            diags_.error(order.range, "E0115", "fence order must be acquire, release, acq_rel, or seq_cst");
+            diags_.error(
+                order.range, "E0115", "fence order must be acquire, release, acq_rel, or seq_cst");
         }
         statement->range.end = order.range.end;
         finish_line();
@@ -701,7 +771,8 @@ ast::StmtPtr Parser::parse_stmt() {
         return statement;
     }
 
-    if (at(TokenKind::LBrace)) return parse_block();
+    if (at(TokenKind::LBrace))
+        return parse_block();
 
     if (at(TokenKind::KwScope)) {
         advance();
@@ -717,12 +788,14 @@ ast::StmtPtr Parser::parse_stmt() {
     }
 
     auto expression = parse_expr();
-    if (at(TokenKind::Eq) || at(TokenKind::PlusEq) || at(TokenKind::MinusEq) || at(TokenKind::StarEq) ||
-        at(TokenKind::SlashEq) || at(TokenKind::PercentEq) || at(TokenKind::AmpEq) || at(TokenKind::PipeEq) ||
-        at(TokenKind::CaretEq) || at(TokenKind::ShiftLeftEq) || at(TokenKind::ShiftRightEq)) {
+    if (at(TokenKind::Eq) || at(TokenKind::PlusEq) || at(TokenKind::MinusEq) ||
+        at(TokenKind::StarEq) || at(TokenKind::SlashEq) || at(TokenKind::PercentEq) ||
+        at(TokenKind::AmpEq) || at(TokenKind::PipeEq) || at(TokenKind::CaretEq) ||
+        at(TokenKind::ShiftLeftEq) || at(TokenKind::ShiftRightEq)) {
         const Token op = advance();
         auto value = parse_expr();
-        auto statement = std::make_unique<ast::AssignStmt>(std::move(expression), op.text, std::move(value));
+        auto statement =
+            std::make_unique<ast::AssignStmt>(std::move(expression), op.text, std::move(value));
         statement->range = {statement->target->range.begin, statement->value->range.end};
         finish_line();
         return statement;
@@ -773,7 +846,8 @@ ast::ExprPtr Parser::parse_expr(int min_precedence) {
     auto lhs = parse_postfix(parse_prefix());
     for (;;) {
         const int current_precedence = precedence(peek().kind);
-        if (current_precedence < min_precedence) break;
+        if (current_precedence < min_precedence)
+            break;
         const std::string op = peek().text;
         advance();
         auto rhs = parse_expr(current_precedence + 1);
@@ -813,7 +887,8 @@ ast::ExprPtr Parser::parse_new() {
             field.value = parse_expr();
             field.range.end = field.value->range.end;
             expression->fields.push_back(std::move(field));
-            if (!consume(TokenKind::Comma) || at(TokenKind::RParen)) break;
+            if (!consume(TokenKind::Comma) || at(TokenKind::RParen))
+                break;
         }
     }
     const Token close = expect(TokenKind::RParen, "')'");
@@ -854,7 +929,8 @@ ast::ExprPtr Parser::parse_prefix() {
         expression->range = token.range;
         return expression;
     }
-    if (at(TokenKind::KwNew)) return parse_new();
+    if (at(TokenKind::KwNew))
+        return parse_new();
 
     if (at(TokenKind::Identifier) || at(TokenKind::KwSelf) || at(TokenKind::KwPtr)) {
         advance();
@@ -864,10 +940,12 @@ ast::ExprPtr Parser::parse_prefix() {
                 std::size_t scan = pos_;
                 int depth = 0;
                 for (; scan < toks_.size(); ++scan) {
-                    if (toks_[scan].kind == TokenKind::Less) ++depth;
+                    if (toks_[scan].kind == TokenKind::Less)
+                        ++depth;
                     else if (toks_[scan].kind == TokenKind::Greater) {
                         if (--depth == 0) {
-                            struct_literal = scan + 1 < toks_.size() && toks_[scan + 1].kind == TokenKind::LBrace;
+                            struct_literal = scan + 1 < toks_.size() &&
+                                             toks_[scan + 1].kind == TokenKind::LBrace;
                             break;
                         }
                     } else if (depth == 0) {
@@ -879,7 +957,8 @@ ast::ExprPtr Parser::parse_prefix() {
                 auto expression = std::make_unique<ast::StructLiteralExpr>(token.text);
                 expression->range.begin = token.range.begin;
                 if (at(TokenKind::Less)) {
-                    expression->generic_args = parse_type_arguments(TokenKind::Less, TokenKind::Greater);
+                    expression->generic_args =
+                        parse_type_arguments(TokenKind::Less, TokenKind::Greater);
                 }
                 expect(TokenKind::LBrace, "'{'");
                 while (!at(TokenKind::RBrace) && !at(TokenKind::End)) {
@@ -890,7 +969,8 @@ ast::ExprPtr Parser::parse_prefix() {
                     field.value = parse_expr();
                     field.range.end = field.value->range.end;
                     expression->fields.push_back(std::move(field));
-                    if (!consume(TokenKind::Comma)) break;
+                    if (!consume(TokenKind::Comma))
+                        break;
                 }
                 const Token close = expect(TokenKind::RBrace, "'}'");
                 expression->range.end = close.range.end;
@@ -902,7 +982,8 @@ ast::ExprPtr Parser::parse_prefix() {
         return expression;
     }
 
-    if (at(TokenKind::KwAsm)) return parse_asm();
+    if (at(TokenKind::KwAsm))
+        return parse_asm();
 
     if (consume(TokenKind::LParen)) {
         auto expression = parse_expr();
@@ -944,7 +1025,8 @@ ast::ExprPtr Parser::parse_prefix() {
         return expression;
     }
 
-    if (at(TokenKind::Minus) || at(TokenKind::Bang) || at(TokenKind::Tilde) || at(TokenKind::Star)) {
+    if (at(TokenKind::Minus) || at(TokenKind::Bang) || at(TokenKind::Tilde) ||
+        at(TokenKind::Star)) {
         const Token op = advance();
         auto operand = parse_postfix(parse_prefix());
         auto expression = std::make_unique<ast::UnaryExpr>(op.text, std::move(operand));
@@ -963,20 +1045,24 @@ ast::ExprPtr Parser::parse_postfix(ast::ExprPtr base) {
     for (;;) {
         if ((at(TokenKind::Less) || at(TokenKind::LBracket)) && base->kind == ast::ExprKind::Name) {
             const TokenKind open = peek().kind;
-            const TokenKind close = open == TokenKind::Less ? TokenKind::Greater : TokenKind::RBracket;
+            const TokenKind close =
+                open == TokenKind::Less ? TokenKind::Greater : TokenKind::RBracket;
             std::size_t scan = pos_;
             int depth = 0;
             bool generic_call = false;
             for (; scan < toks_.size(); ++scan) {
                 if (open == TokenKind::Less &&
-                    (toks_[scan].kind == TokenKind::Newline || toks_[scan].kind == TokenKind::Colon ||
-                     toks_[scan].kind == TokenKind::Dedent || toks_[scan].kind == TokenKind::End)) break;
+                    (toks_[scan].kind == TokenKind::Newline ||
+                     toks_[scan].kind == TokenKind::Colon ||
+                     toks_[scan].kind == TokenKind::Dedent || toks_[scan].kind == TokenKind::End))
+                    break;
                 if (toks_[scan].kind == open) {
                     ++depth;
                 } else if (toks_[scan].kind == close) {
                     --depth;
                     if (depth == 0) {
-                        generic_call = scan + 1 < toks_.size() && toks_[scan + 1].kind == TokenKind::LParen;
+                        generic_call =
+                            scan + 1 < toks_.size() && toks_[scan + 1].kind == TokenKind::LParen;
                         break;
                     }
                 }
@@ -989,7 +1075,8 @@ ast::ExprPtr Parser::parse_postfix(ast::ExprPtr base) {
                 if (!at(TokenKind::RParen)) {
                     for (;;) {
                         call->args.push_back(parse_expr());
-                        if (!consume(TokenKind::Comma) || at(TokenKind::RParen)) break;
+                        if (!consume(TokenKind::Comma) || at(TokenKind::RParen))
+                            break;
                     }
                 }
                 const Token close_paren = expect(TokenKind::RParen, "')'");
@@ -1004,7 +1091,8 @@ ast::ExprPtr Parser::parse_postfix(ast::ExprPtr base) {
             if (!at(TokenKind::RParen)) {
                 for (;;) {
                     call->args.push_back(parse_expr());
-                    if (!consume(TokenKind::Comma) || at(TokenKind::RParen)) break;
+                    if (!consume(TokenKind::Comma) || at(TokenKind::RParen))
+                        break;
                 }
             }
             const Token close = expect(TokenKind::RParen, "')'");
@@ -1049,8 +1137,10 @@ ast::ExprPtr Parser::parse_asm() {
         }
 
         Token kind;
-        if (at(TokenKind::KwIn)) kind = advance();
-        else kind = expect(TokenKind::Identifier, "asm operand kind");
+        if (at(TokenKind::KwIn))
+            kind = advance();
+        else
+            kind = expect(TokenKind::Identifier, "asm operand kind");
 
         if (kind.text == "clobber") {
             expect(TokenKind::LParen, "'('");
@@ -1074,7 +1164,8 @@ ast::ExprPtr Parser::parse_asm() {
             operand.kind = ast::AsmOperand::Kind::In;
             operand.value = parse_expr();
         } else if (kind.text == "out" || kind.text == "inout") {
-            operand.kind = kind.text == "out" ? ast::AsmOperand::Kind::Out : ast::AsmOperand::Kind::InOut;
+            operand.kind =
+                kind.text == "out" ? ast::AsmOperand::Kind::Out : ast::AsmOperand::Kind::InOut;
             operand.out_name = expect(TokenKind::Identifier, "output variable").text;
         } else {
             diags_.error(kind.range, "E0110", "asm operand must be in, out, inout, or clobber");
@@ -1089,4 +1180,4 @@ ast::ExprPtr Parser::parse_asm() {
     return assembly;
 }
 
-}  // namespace uinx
+} // namespace uinx

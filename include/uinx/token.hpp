@@ -134,4 +134,4 @@ struct Token {
 
 std::string_view token_name(TokenKind kind);
 
-}  // namespace uinx
+} // namespace uinx

@@ -3,15 +3,20 @@
 // By JiTianYu391
 
 #include "runtime.h"
+
 #include <stdint.h>
 #include <stdio.h>
 
-typedef struct { void* state; const uinx_future_vtable* vtable; } uinx_future_abi;
+typedef struct {
+    void* state;
+    const uinx_future_vtable* vtable;
+} uinx_future_abi;
 extern uinx_future_abi async_answer(void);
 
 int main(void) {
     uinx_future_abi future = async_answer();
-    if (!future.state || !future.vtable || !future.vtable->poll || !future.vtable->drop) return 10;
+    if (!future.state || !future.vtable || !future.vtable->poll || !future.vtable->drop)
+        return 10;
     int32_t output = -1;
     int32_t first = future.vtable->poll(future.state, &output);
     if (first != 0) {
