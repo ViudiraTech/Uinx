@@ -23,6 +23,7 @@ struct FunctionSig {
 struct StructInfo {
     std::string name;
     std::vector<std::string> generic_names;
+    std::unordered_map<std::string, std::vector<std::string>> bounds;
     std::unordered_map<std::string, Type> fields;
     std::unordered_set<std::string> shared_fields;
     const ast::StructDecl* decl{};
@@ -80,6 +81,10 @@ class TypeChecker {
         std::size_t loop_depth{0};
     };
     void collect_items(const ast::Module& module);
+    void validate_special_traits();
+    bool copy_eligible(const Type& type,
+                       std::unordered_set<std::string>& visiting,
+                       bool require_explicit_named_impl = true) const;
     void check_function(const ast::FunctionDecl& fn, const FunctionSig& sig);
     void check_block(const ast::BlockStmt& block, FnContext& ctx);
     void check_stmt(const ast::Stmt& stmt, FnContext& ctx);

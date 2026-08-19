@@ -314,6 +314,33 @@ std::vector<ast::GenericParam> Parser::parse_generics() {
     return params;
 }
 
+void Parser::parse_where_clause(std::vector<ast::GenericParam>& params) {
+    if (!consume(TokenKind::KwWhere))
+        return;
+
+    for (;;) {
+        const Token name = expect(TokenKind::Identifier, "generic parameter in where clause");
+        auto param = std::find_if(params.begin(), params.end(), [&](const ast::GenericParam& item) {
+            return item.name == name.text;
+        });
+        if (param == params.end()) {
+            diags_.error(name.range,
+                         "E0115",
+                         "where clause references unknown generic parameter '" + name.text + "'");
+        }
+        expect(TokenKind::Colon, "':' after generic parameter in where clause");
+        do {
+            const Token bound = expect(TokenKind::Identifier, "trait bound");
+            if (param != params.end() &&
+                std::find(param->bounds.begin(), param->bounds.end(), bound.text) ==
+                    param->bounds.end())
+                param->bounds.push_back(bound.text);
+        } while (consume(TokenKind::Plus));
+        if (!consume(TokenKind::Comma))
+            break;
+    }
+}
+
 ast::Param Parser::parse_parameter() {
     ast::Param param;
     param.range.begin = peek().range.begin;
@@ -375,6 +402,7 @@ ast::FunctionDecl Parser::parse_function(
         function.return_type = parse_type();
     else
         function.return_type.name = "unit";
+    parse_where_clause(function.generics);
 
     if (extern_ && (at(TokenKind::Newline) || at(TokenKind::Semicolon) || at(TokenKind::End))) {
         finish_line();
@@ -393,6 +421,7 @@ ast::StructDecl Parser::parse_struct(bool pub) {
     expect(TokenKind::KwStruct, "struct");
     structure.name = expect(TokenKind::Identifier, "struct name").text;
     structure.generics = parse_generics();
+    parse_where_clause(structure.generics);
 
     const Suite suite = begin_suite();
     while (!suite_done(suite)) {
@@ -1014,6 +1043,14 @@ ast::ExprPtr Parser::parse_prefix() {
         auto value = parse_postfix(parse_prefix());
         auto expression = std::make_unique<ast::AwaitExpr>(std::move(value));
         expression->range = {begin, expression->value->range.end};
+        return expression;
+    }
+
+    if (at(TokenKind::KwMove)) {
+        const Token op = advance();
+        auto operand = parse_postfix(parse_prefix());
+        auto expression = std::make_unique<ast::UnaryExpr>("move", std::move(operand));
+        expression->range = {op.range.begin, expression->operand->range.end};
         return expression;
     }
 

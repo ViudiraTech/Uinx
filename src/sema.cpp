@@ -149,6 +149,9 @@ void NameResolver::resolve_block(
             else
                 scopes.back()[l->name] = id;
             out.bindings[l] = id;
+        } else if (auto a = dynamic_cast<const ast::AssignStmt*>(&s)) {
+            resolve_expr(out, *a->target, scopes);
+            resolve_expr(out, *a->value, scopes);
         } else if (auto e = dynamic_cast<const ast::ExprStmt*>(&s)) {
             resolve_expr(out, *e->expr, scopes);
         } else if (auto r = dynamic_cast<const ast::ReturnStmt*>(&s)) {
@@ -170,6 +173,7 @@ void NameResolver::resolve_block(
             scopes.emplace_back();
             auto id = add(out, hir::SymbolKind::Local, f->name, f->range, owner);
             scopes.back()[f->name] = id;
+            out.for_bindings[f] = id;
             resolve_block(out, *f->body, scopes, owner);
             scopes.pop_back();
         } else if (auto loop = dynamic_cast<const ast::LoopStmt*>(&s)) {
@@ -358,6 +362,7 @@ void TypeChecker::collect_items(const ast::Module& module) {
             for (const auto& g : s->generics) {
                 gs.insert(g.name);
                 info.generic_names.push_back(g.name);
+                info.bounds[g.name] = g.bounds;
             }
             for (const auto& field : s->fields) {
                 Type ft = type_from_ast(field.type, gs);
@@ -465,8 +470,81 @@ void TypeChecker::collect_items(const ast::Module& module) {
             }
         }
 }
+
+bool TypeChecker::copy_eligible(const Type& type,
+                                std::unordered_set<std::string>& visiting,
+                                bool require_explicit_named_impl) const {
+    if (type.is_copy())
+        return true;
+    if (type.kind == TypeKind::Ref)
+        return !type.mut;
+    if (type.kind == TypeKind::Generic)
+        return false;
+    if (type.kind != TypeKind::Named)
+        return false;
+
+    const std::string key = type.str();
+    if (!visiting.insert(key).second)
+        return false;
+
+    const auto finish = [&](bool result) {
+        visiting.erase(key);
+        return result;
+    };
+
+    const bool has_drop = std::any_of(model_.impls.begin(), model_.impls.end(), [&](const ImplInfo& impl) {
+        return impl.trait == "Drop" && impl.for_type == type;
+    });
+    if (has_drop)
+        return finish(false);
+
+    if (require_explicit_named_impl) {
+        const bool has_copy =
+            std::any_of(model_.impls.begin(), model_.impls.end(), [&](const ImplInfo& impl) {
+                return impl.trait == "Copy" && impl.for_type == type;
+            });
+        if (!has_copy)
+            return finish(false);
+    }
+
+    const auto structure = model_.structs.find(type.name);
+    if (structure == model_.structs.end())
+        return finish(false);
+    if (type.args.size() != structure->second.generic_names.size())
+        return finish(false);
+
+    std::unordered_map<std::string, Type> subst;
+    for (std::size_t i = 0; i < type.args.size(); ++i)
+        subst[structure->second.generic_names[i]] = type.args[i];
+
+    for (const auto& [field_name, field_type] : structure->second.fields) {
+        (void)field_name;
+        const Type concrete = substitute_type(field_type, subst);
+        if (!copy_eligible(concrete, visiting, true))
+            return finish(false);
+    }
+    return finish(true);
+}
+
+void TypeChecker::validate_special_traits() {
+    for (const auto& impl : model_.impls) {
+        if (impl.trait != "Copy")
+            continue;
+        std::unordered_set<std::string> visiting;
+        if (!copy_eligible(impl.for_type, visiting, false)) {
+            const SourceRange range = impl.decl ? impl.decl->range : SourceRange{};
+            diags_.error(range,
+                         "E0361",
+                         "type '" + impl.for_type.str() +
+                             "' cannot implement Copy: every field must be Copy and Copy is "
+                             "incompatible with mutable references or Drop");
+        }
+    }
+}
+
 SemanticModel TypeChecker::check(const ast::Module& module) {
     collect_items(module);
+    validate_special_traits();
     FunctionSig global_sig;
     global_sig.result = Type::builtin("unit");
     FnContext global_ctx;
@@ -1169,6 +1247,19 @@ Type TypeChecker::check_expr(const ast::Expr& e, FnContext& c, bool) {
             std::unordered_map<std::string, Type> subst;
             for (std::size_t i = 0; i < type_args.size(); ++i)
                 subst[si->second.generic_names[i]] = type_args[i];
+            TraitSolver solver(model_);
+            for (const auto& [generic, bounds] : si->second.bounds) {
+                const auto actual = subst.find(generic);
+                if (actual == subst.end())
+                    continue;
+                for (const auto& bound : bounds)
+                    if (!solver.satisfies(actual->second, bound))
+                        diags_.error(e.range,
+                                     "E0362",
+                                     "type '" + actual->second.str() +
+                                         "' does not satisfy struct bound '" + generic + ": " +
+                                         bound + "'");
+            }
             std::unordered_set<std::string> seen;
             for (const auto& f : st.fields) {
                 if (!seen.insert(f.name).second)
@@ -1213,6 +1304,8 @@ Type TypeChecker::check_expr(const ast::Expr& e, FnContext& c, bool) {
             } else if (u.op == "-") {
                 if (!x.is_numeric())
                     diags_.error(e.range, "E0319", "unary - requires numeric operand");
+                t = x;
+            } else if (u.op == "move") {
                 t = x;
             } else if (u.op == "*") {
                 if (x.kind != TypeKind::Ref && x.kind != TypeKind::RawPtr) {

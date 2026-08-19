@@ -106,10 +106,16 @@ Use `pass` for an intentionally empty suite.
 func identity[T: Copy](value: T) -> T:
     return value
 
+func keep[T](value: T) -> T where T: Copy + Send:
+    return value
+
+struct Slot[T] where T: Copy:
+    value: T
+
 val result = identity[i32](42)
 ```
 
-Generic declarations/applications use square brackets. Multiple bounds use `+`.
+Generic declarations/applications use square brackets. Multiple bounds use `+`. Function and struct bounds may be written inline or in a trailing `where` clause. A `where` clause may only name generic parameters declared by that item. Struct bounds are checked when a concrete struct literal is instantiated.
 
 ## 8. References, pointers, ownership
 
@@ -128,6 +134,7 @@ Expressions:
 val shared = borrow value
 val unique = borrow mut value
 val copied = deref shared
+val transferred = move resource
 ```
 
 Raw-pointer arithmetic and dereference require unsafe context. Typed pointer `+`/`-` integer arithmetic lowers as element-address computation, and raw-pointer dereference is a valid assignment place:
@@ -137,7 +144,9 @@ unsafe:
     deref (buffer + index) = byte
 ```
 
-Non-`Copy` values move on by-value use; mutable references are affine. The borrow checker performs last-use loan shortening and field-sensitive place tracking for the verified forms.
+Non-`Copy` values move on by-value use; `move value` is the explicit spelling for the same ownership transfer. Mutable references are affine. `Copy` is compiler-validated: an explicit `Copy` implementation is rejected if a concrete field is not copyable, if it contains an exclusive mutable reference, or if the same concrete type implements `Drop`.
+
+The borrow checker uses resolved HIR binding identity, backward control-flow liveness, and forward fixed-point ownership/loan state. It tracks struct-field places, conservatively aliases dynamic indexes, propagates reference provenance through aggregates/calls/method receivers, merges branch and loop states, rejects stack-reference escape, and fails compilation if its bounded dataflow analysis cannot converge. Shadowed source names therefore remain distinct ownership places.
 
 ## 9. Control flow
 
@@ -291,7 +300,13 @@ isize usize
 f32 f64
 ```
 
-## 20. Compatibility syntax
+## 20. Computational model
+
+Uinx has mutable state, conditionals, `while`/`loop`, recursion, integer operations, function calls, and dynamically managed memory layers. In the ordinary abstract-machine sense this is a general-purpose/Turing-complete computational model. As with every implementation on real hardware, concrete executions are bounded by finite memory and time.
+
+Self-hosting is a separate property: the current canonical compiler is still C++20. See `BOOTSTRAP.md` for the stage0/stage1/stage2 acceptance criteria.
+
+## 21. Compatibility syntax
 
 Older Rust/C-shaped aliases such as `fn`, `pub`, `let`, brace/semicolon suites, `&T`, `&mut T`, `*const T`, `*mut T`, angle-bracket generic applications, and `impl Trait for Type` may remain accepted for migration. They are not canonical Uinx 0.3 and should not appear in new examples or standard-library code.
 

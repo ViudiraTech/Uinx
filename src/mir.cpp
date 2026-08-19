@@ -722,6 +722,8 @@ std::pair<std::string, Type> MIRLowerer::lower_expr(const ast::Expr& e, FnState&
         case ast::ExprKind::Unary: {
             auto& u = static_cast<const ast::UnaryExpr&>(e);
             auto [v, t] = lower_expr(*u.operand, s);
+            if (u.op == "move")
+                return {v, ty};
             if (u.op == "*") {
                 std::string r = temp(s);
                 emit(s, {mir::Op::Load, r, ty, {v}, "", {}, false, e.range});

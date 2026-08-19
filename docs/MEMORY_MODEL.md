@@ -13,6 +13,30 @@ unsafe:
     deref raw = 42
 ```
 
+### Borrow-checking invariants
+
+The safe-reference checker treats ownership as a control-flow dataflow problem rather than a lexical-block counter. Local and parameter places use HIR `SymbolId` identity, so two bindings with the same spelling in nested scopes cannot share move or loan state accidentally.
+
+For the currently implemented language forms, the checker enforces these invariants before MIR/code generation:
+
+- a non-`Copy` place cannot be used after move until that place is fully reinitialized;
+- a moved parent cannot be resurrected by initializing only one child field;
+- an active `mutref` excludes overlapping reads, writes, moves, and other borrows;
+- an active shared `ref` excludes overlapping writes/moves and mutable borrows but permits reads/shared aliases;
+- sibling struct fields are independent places, while dynamic indexes conservatively alias;
+- reference provenance follows bindings, struct fields, assignments, calls, method receivers, and returned aggregates;
+- a safe reference into stack-owned storage cannot escape the storage scope or function;
+- branch joins and loop back-edges merge ownership/loan state to a fixed point;
+- loan expiry uses backward liveness rather than source-block end alone;
+- safe stack-borrowed references that would remain live across `await` are conservatively rejected;
+- dataflow non-convergence is a compile error (`E0408`) rather than permission to continue with an under-approximated state.
+
+`unsafe` permits operations whose correctness cannot be established by these rules, especially raw-pointer dereference/arithmetic and assembly. It does not turn safe references into unchecked aliases.
+
+### `Copy` is not a user assertion
+
+An explicit `Copy` implementation is accepted only when every concrete field is itself copyable. Exclusive mutable references are not `Copy`, and a concrete type cannot simultaneously rely on `Drop` and be treated as `Copy`. This prevents a trait declaration from manufacturing a second safe `mutref`.
+
 ## Declaring concurrency
 
 A function that can execute concurrently on multiple CPUs/threads is declared with `concurrent`:

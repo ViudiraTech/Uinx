@@ -4,7 +4,7 @@
 
 ## Verified in this release
 
-- Extended canonical syntax with `const`, `static`, `for`, `loop`, `break`, `continue`, bitwise/shift operators and compound assignments.
+- Extended canonical syntax with `const`, `static`, `for`, `loop`, `break`, `continue`, explicit `move`, `where` bounds, bitwise/shift operators and compound assignments.
 - OS-aware SMP model with `concurrent`, `shared`, `percpu`, `smp auto/manual/strict`, explicit `fence` and `compiler_fence`.
 - Call-graph concurrency propagation and automatic atomic promotion for compatible mutable global/field state.
 - LLVM atomic load/store/RMW/fence lowering with acquire/release/acq_rel automatic ordering and seq_cst strict mode.
@@ -17,9 +17,10 @@
 - Indentation-sensitive canonical syntax with migration compatibility for the 0.1 brace syntax.
 - `need` / `dontneed` source directives, including `dontneed std` and package-tool source/link selection.
 - Direct LLVM IR backend, object generation and separate link phase.
-- Static typing, local inference, generic functions/struct layouts and trait-bound checking for tested forms.
-- Trait implementation conformance and method calls.
-- Ownership moves, non-copy mutable references, NLL-style last-use loan shortening, field-sensitive borrowing, conservative index borrowing, and tested stack-reference escape rejection.
+- Static typing, local inference, generic functions/struct layouts, inline/`where` trait bounds, and concrete struct-bound checking for tested forms.
+- Trait implementation conformance and method calls, with compiler-enforced `Copy` eligibility that rejects mutable-reference fields and `Copy`/`Drop` conflicts.
+- Ownership moves and explicit `move`, affine mutable references, HIR binding-identity places, partial move/reinitialization, field-sensitive borrowing, conservative index aliasing, reference provenance through aggregates/calls/method receivers, backward liveness-based loan expiry, branch/loop fixed-point state merging, and stack-reference escape rejection for implemented forms.
+- Borrow dataflow uses a fail-closed non-convergence diagnostic instead of silently accepting an incomplete fixed point.
 - Safe Slice/SliceMut indexing with runtime bounds trap.
 - Synchronous RAII Drop calls for tested concrete types.
 - Scalar/pointer C FFI on the host target.
@@ -35,8 +36,9 @@
 
 The following items are intentionally not represented as passing merely because source declarations exist:
 
-- `UNVERIFIED`: formal proof that all safe Uinx programs are free of data races and every lifetime/borrow edge case; automatic SMP strengthening is tested but not a theorem over unsafe/FFI/external-agent code.
-- `UNVERIFIED`: complete borrow-region solving across arbitrary irreducible CFGs and all loop/join patterns.
+- `UNVERIFIED`: formal proof that all safe Uinx programs are memory-safe/data-race-free in every lifetime, provenance, async, FFI and weak-memory edge case; implemented checks are conservative engineering mechanisms, not a theorem.
+- `UNVERIFIED`: rustc-equivalent region inference/Polonius semantics, two-phase borrows, every irreducible CFG shape, and formal equivalence to Rust's complete safe-reference model.
+- `UNVERIFIED`: self-hosting. The canonical compiler is C++20; no complete Uinx-written stage1 compiler is shipped yet. `BOOTSTRAP.md` defines the required stage0/stage1/stage2 criteria.
 - `UNVERIFIED`: generic Drop specialization for every nested generic ownership pattern and panic/unwind destruction.
 - `UNVERIFIED`: aggregate/bitfield/vector C ABI portability across all architectures and operating systems.
 - `UNVERIFIED`: allocator-free async frame placement and kernel executor integration.

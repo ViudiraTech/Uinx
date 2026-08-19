@@ -39,6 +39,7 @@ class Parser {
     void parse_smp_mode(ast::Module& module);
     ast::TypeRef parse_type();
     std::vector<ast::GenericParam> parse_generics();
+    void parse_where_clause(std::vector<ast::GenericParam>& params);
     std::vector<ast::TypeRef> parse_type_arguments(TokenKind open, TokenKind close);
 
     ast::FunctionDecl parse_function(bool pub,

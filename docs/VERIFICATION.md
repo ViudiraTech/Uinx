@@ -2,41 +2,30 @@
 
 **Copyright © 2026 ViudiraTech · Code by JiTianYu391**
 
-Validation artifacts in `verification/` must describe the current source tree. Old release logs are not treated as evidence for 0.3; verification artifacts must be regenerated from this source tree.
+Verification is reproducible from source and is intentionally **ephemeral**. Build directories, probe programs, and test-output transcripts are not required source artifacts and should not be committed merely to prove that a command ran once.
 
-## Test suite
+## Canonical verification
 
-The Uinx 0.3 CTest suite contains 18 top-level tests:
+From a clean tree:
 
-1. compiler unit tests
-2. runtime unit tests
-3. x86 inline-asm object emission
-4. x86 asm input/output executable
-5. x86 asm inout executable
-6. x86 asm multiple-output executable
-7. safe slice in-bounds executable
-8. safe slice out-of-bounds trap
-9. C FFI executable
-10. three-architecture `dontneed std` object emission
-11. AArch64/RISC-V cross-target asm objects
-12. invalid AArch64 register rejection
-13. three-architecture freestanding ELF linking
-14. async suspend/resume executable harness
-15. compile-pass conformance corpus
-16. compile-fail conformance corpus with exact expected diagnostics
-17. borrow-fail safety corpus with exact expected diagnostics
-18. package tooling integration, including x86-64/AArch64/RISC-V64 kernel scaffolds and SMP policy overrides
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j
+ctest --test-dir build --output-on-failure
+```
 
-The canonical test sources use the indentation-based 0.3 syntax rather than the migration aliases.
+The Uinx 0.3 CTest configuration currently defines 18 top-level tests covering compiler/runtime units, inline assembly, executable I/O/inout paths, safe slice bounds behavior, C FFI, cross-target object generation, bare-metal linking, async suspend/resume, positive and negative conformance, borrow-safety rejection, and package tooling.
 
-## Standard library aggregate check
+Negative suites require their expected diagnostic code rather than accepting any arbitrary compiler failure.
 
-All `.ux` files under `stdlib/` can be supplied to one `uinxc --emit=check` invocation. This validates parser, resolver, type, trait and ownership compatibility as one source set.
+## Additional release checks
 
-## Examples
+When preparing a release, also check the shipped standard-library sources and examples with `uinxc --emit=check`, and run the project formatting checks. Cross-target and bare-metal checks should use the CMake integration tests so target selection and linker behavior are exercised through the same path users receive.
 
-Every shipped `.ux` example is checked individually with `uinxc --emit=check`; the result is recorded in `verification/examples-check.txt`.
+Fuzzers and the compiler benchmark remain buildable project components. A short fuzz run or microbenchmark is useful during development but is not a proof of compiler correctness or a historical performance claim.
 
-## Fuzzing and benchmarks
+## Artifact policy
 
-Fuzzer and benchmark targets remain part of the project. A bounded or historical fuzz run is not represented as current release evidence unless it is regenerated against the exact source tree. Long-duration fuzz confidence remains `UNVERIFIED`.
+Temporary build trees and ad-hoc safety probes should live outside the repository (for example under `/tmp`) and be deleted after the run. CI may retain its own logs as CI artifacts, but this source tree does not need a growing collection of `ctest-*.txt` or build transcripts.
+
+Release claims belong in `RELEASE_STATUS.md`, where implemented behavior is separated from properties that remain unverified.

@@ -2,15 +2,19 @@
 
 # Uinx
 
-### Readable syntax. Native code. Built for systems.
+### Systems programming without syntax noise
 
-Uinx is an ahead-of-time systems programming language with **Python-style indentation**, **ownership and borrowing**, **LLVM native code generation**, **no tracing GC**, and a first-class **freestanding kernel path**.
+**Readable indentation · ownership & borrowing · native LLVM code · no tracing GC · freestanding-first**
 
 ![Version](https://img.shields.io/badge/version-0.3.0-4C8BF5?style=flat-square)
-![C++](https://img.shields.io/badge/compiler-C%2B%2B20-00599C?style=flat-square&logo=cplusplus&logoColor=white)
-![LLVM](https://img.shields.io/badge/backend-LLVM-262D3A?style=flat-square&logo=llvm)
+![Compiler](https://img.shields.io/badge/compiler-C%2B%2B20-00599C?style=flat-square&logo=cplusplus&logoColor=white)
+![Backend](https://img.shields.io/badge/backend-LLVM-262D3A?style=flat-square&logo=llvm)
 ![License](https://img.shields.io/badge/license-BSD--3--Clause-44CC11?style=flat-square)
-![GC](https://img.shields.io/badge/GC-none-success?style=flat-square)
+![GC](https://img.shields.io/badge/tracing_GC-none-success?style=flat-square)
+
+Uinx is an ahead-of-time systems language for kernels, drivers, embedded software,
+runtimes, and native applications. Its surface is intentionally Python-like; its
+execution model stays explicit enough for low-level work.
 
 **Copyright © 2026 ViudiraTech · Code by JiTianYu391**
 
@@ -18,9 +22,7 @@ Uinx is an ahead-of-time systems programming language with **Python-style indent
 
 ---
 
-## Why Uinx?
-
-Uinx keeps the machinery needed for kernels, drivers, embedded software, runtimes, and high-performance native programs without forcing ordinary code to look like punctuation-heavy C++ or Rust.
+## A small surface, a real compiler pipeline
 
 ```uinx
 struct Counter:
@@ -37,88 +39,161 @@ func main() -> i32:
     return counter.value - 42
 ```
 
-The compiler pipeline is native:
+Uinx compiles directly through its own front end and MIR into LLVM IR; it is not a
+C/C++ transpiler.
 
 ```text
-Source → Lexer → Parser → AST → Name/Type/Trait Analysis
-       → Ownership/Borrow Check → MIR → Optimization → LLVM → Object/ELF
+Source
+  ↓
+Lexer → Parser → AST → Name Resolution / HIR
+  ↓
+Type + Trait Analysis
+  ↓
+Ownership / Borrow / Lifetime-Flow Analysis
+  ↓
+MIR → Optimization → LLVM IR → Object → Executable / ELF
 ```
 
-Uinx does not transpile programs to C or C++.
+## What the language looks like
 
-## Language at a glance
-
-| Area | Uinx 0.3 |
+| Area | Canonical Uinx |
 |---|---|
 | Blocks | indentation + `:` |
-| Immutable / mutable | `val` / `var` |
+| Bindings | `val` immutable, `var` mutable |
 | Functions | `func name(...) -> Type:` |
-| Structures | `struct`, `new`, `extend` |
+| Data | `struct`, `new`, `extend` |
 | Generics | `Name[T]`, `func f[T](...)` |
+| Bounds | `[T: Copy]` or `where T: Copy + Send` |
+| Ownership | implicit move + explicit `move value` |
+| References | `ref T`, `mutref T`, `borrow`, `borrow mut` |
+| Raw pointers | `ptr T`, `mutptr T`, unsafe dereference/arithmetic |
 | Traits | `trait`, `extend Type with Trait` |
-| References | `ref T`, `mutref T` |
-| Raw pointers | `ptr T`, `mutptr T` |
-| Ownership | move + borrow checking + RAII |
-| Unsafe boundary | `unsafe func`, `unsafe:` |
+| RAII | `Drop` on normal scope exit for implemented forms |
+| Unsafe | `unsafe func`, `unsafe:` |
 | C ABI | `extern "C" func` |
-| Assembly | native LLVM inline `asm()` |
+| Assembly | LLVM-backed `asm()` |
 | Async | `async func`, `await` |
 | Freestanding | `dontneed std`, `need core` |
 | SMP | `concurrent`, `shared`, `percpu`, `smp` |
 
-### Control flow
+### Generics without punctuation overload
+
+Bounds can stay next to the parameter or move into a `where` clause when the
+signature gets busy:
 
 ```uinx
-func sum_without_two() -> i32:
-    var total: i32 = 0
+func keep[T](value: T) -> T where T: Copy + Send:
+    return value
 
-    for i in 0 .. 6:
-        if i == 2:
-            continue
-        total += i
-
-    loop:
-        if total >= 13:
-            break
-        total += 1
-
-    return total
+struct Slot[T] where T: Copy:
+    value: T
 ```
 
-`while`, `if / elif / else`, `scope`, `return`, `break`, and `continue` are also implemented.
+`Copy` is compiler-validated. An explicit `Copy` implementation is rejected when
+a field is not actually copyable, when it contains an exclusive mutable reference,
+or when the same concrete type has `Drop` semantics.
 
-### Globals and bit operations
+### Ownership is visible when you want it to be
 
 ```uinx
-const PAGE_SHIFT: u64 = 12
-static var flags: u64 = 0
+struct Packet:
+    id: u64
 
-func enable_page_flag() -> unit:
-    flags |= 1 << PAGE_SHIFT
-    flags &= ~((1 as u64) << 2)
-    return
+func consume(packet: Packet) -> u64:
+    return packet.id
+
+func main() -> i32:
+    val packet = new Packet(id=42)
+    val owned = move packet
+    consume(owned)
+    return 0
 ```
 
-## `need` and `dontneed`
+Ordinary by-value use already moves non-`Copy` values. `move` is the explicit
+spelling for APIs and code where making transfer intent obvious is useful.
 
-Source code states what environment it needs:
+## Safety model
+
+Safe references are `ref T` and `mutref T`; raw pointers are separated behind an
+`unsafe` boundary. The borrow checker now tracks **resolved HIR binding identity**
+rather than variable spelling, so shadowed locals cannot accidentally erase or
+reuse another binding's ownership state.
+
+The current checker includes:
+
+- non-`Copy` move tracking and partial move/reinitialization;
+- shared-vs-exclusive alias checks down to struct fields, with conservative index aliasing;
+- reference provenance through bindings, aggregates, assignments, calls, method receivers, and returns;
+- branch joins plus loop/back-edge fixed-point analysis;
+- backward CFG-style liveness for non-lexical loan expiry;
+- stack-reference escape rejection through direct and aggregate returns;
+- conservative safe-reference checks across `await` suspension;
+- compiler-validated `Copy` eligibility;
+- fail-closed diagnostics if borrow dataflow cannot converge within its safety limit.
+
+```uinx
+func main() -> i32:
+    var value = 10
+    val view = borrow mut value
+
+    # Rejected while `view` is live:
+    # value = 20
+
+    deref view = 20
+    return value - 20
+```
+
+`unsafe` is an explicit trust boundary, not a switch that disables ownership rules
+for safe references. Raw pointer operations, inline assembly, FFI contracts, MMIO,
+and other externally enforced invariants belong on the unsafe side of that boundary.
+
+> **Scope of the claim:** this tree has substantially stronger control-flow and
+> provenance checking than the earlier 0.3 checker, but it does not claim formal
+> equivalence to `rustc` or a mathematical proof that every possible safe Uinx
+> program is memory-safe. See `docs/RELEASE_STATUS.md` for the exact verified and
+> unverified boundary.
+
+## Control flow and computational model
+
+```uinx
+func gcd(a0: u64, b0: u64) -> u64:
+    var a = a0
+    var b = b0
+    while b != 0:
+        val next = a % b
+        a = b
+        b = next
+    return a
+```
+
+Uinx has mutable state, conditionals, unbounded-language-model loops, recursion,
+integer arithmetic, functions, and dynamically managed memory layers. That is a
+general-purpose/Turing-complete computational model in the usual abstract-machine
+sense; real executions are of course bounded by finite machine resources.
+
+Also implemented: `if / elif / else`, `while`, integer-range `for`, `loop`,
+`break`, `continue`, `scope`, `return`, and `pass`.
+
+## `need` / `dontneed`: environment as source-level intent
+
+Hosted program:
 
 ```uinx
 need std
 ```
 
-A kernel instead starts with:
+Kernel or embedded code:
 
 ```uinx
 dontneed std
 need core
 ```
 
-`dontneed runtime` prevents the hosted runtime archive from being linked. `dontneed dependency_name` excludes a direct manifest path dependency. The old `no_std;` spelling is only a migration alias.
+`dontneed runtime` suppresses the hosted runtime archive. Direct manifest path
+dependencies can be excluded the same way. `no_std;` remains migration syntax;
+`dontneed std` is canonical.
 
-# OS-first SMP model
-
-Uinx 0.3 adds a compiler-visible concurrency model aimed at kernels rather than a blanket "make everything seq_cst" switch.
+## OS-first concurrency
 
 ```uinx
 dontneed std
@@ -136,47 +211,33 @@ public unsafe concurrent func secondary_cpu_entry() -> unit:
     return
 ```
 
-`concurrent` propagates through the call graph, so helpers called by a concurrent entry are analyzed as concurrent too. In `smp auto`, mutable atomic-compatible globals/fields reached by those paths can be promoted to atomic access automatically.
-
-### SMP policies
-
-```uinx
-smp auto       # default: infer + acquire/release/acq_rel
-smp manual     # no implicit atomic promotion
-smp strict     # infer + seq_cst generated atomics
-```
-
-The CLI can override source policy:
-
-```sh
-uinx check --smp=manual
-uinx build --smp=strict
-```
-
-Explicit barriers are available when a protocol requires them:
+`concurrent` propagates through the call graph. In `smp auto`, compatible mutable
+shared state reached by concurrent paths can be strengthened to atomic accesses.
+For protocols that need explicit ordering:
 
 ```uinx
 fence acquire
 fence release
 fence acq_rel
 fence seq_cst
-
 compiler_fence acquire
 ```
 
-For multi-field invariants the compiler does not pretend that independent atomics are enough. Use explicit shared fields, `SpinLock`, per-CPU data, or a protocol appropriate to the kernel subsystem.
+Policies:
 
-### Per-CPU data
-
-```uinx
-percpu var local_ticks: u64 = 0
+```text
+smp auto    infer shared scalar access; acquire/release/acq_rel defaults
+smp manual  only explicitly shared/atomic state is strengthened
+smp strict  inferred accesses use seq_cst
 ```
 
-`percpu` lowers to local-exec TLS and is intentionally excluded from automatic atomic strengthening. Bare-metal kernels must initialize the per-CPU TLS/thread-pointer base before using it on each CPU.
+Multi-field invariants are not magically made correct by independent atomics. Use
+a lock, per-CPU state, or an explicit protocol when the invariant spans multiple
+locations.
 
-# Write a bare-metal kernel
+## Bare-metal path
 
-Create a complete starter project:
+Create a starter kernel:
 
 ```sh
 uinx new mykernel --kernel=x86_64
@@ -184,44 +245,38 @@ cd mykernel
 uinx build --release
 ```
 
-Also implemented:
+Also supported by the project generator:
 
 ```sh
 uinx new mykernel --kernel=aarch64
 uinx new mykernel --kernel=riscv64
 ```
 
-The generator creates architecture startup assembly, a linker script, a freestanding `uinx.toml`, and a Uinx kernel entry. The result is:
-
-```text
-target/release/mykernel.elf
-```
-
-Kernel source uses a dedicated entry rather than hosted `main()`:
+A freestanding entry can stay compact:
 
 ```uinx
 dontneed std
 need core
 smp auto
 
-shared var online_cpus: u64 = 0
-
 public unsafe concurrent func kernel_main() -> unit:
-    online_cpus += 1
     return
 ```
 
-The starter `_start` establishes an early stack, calls `kernel_main`, and enters the target idle loop if it returns. Boot-protocol integration (UEFI, Limine, Multiboot, SBI/device tree, and so on) remains a platform choice rather than hidden compiler behavior.
+The generated project includes startup assembly, a linker script, a freestanding
+manifest, and target-specific ELF linking. Firmware/boot protocol integration is a
+platform decision rather than hidden compiler behavior.
 
-## Freestanding `core`
+## Freestanding building blocks
 
-Uinx 0.3 includes OS-oriented primitives that compile without libc/host runtime on the verified bare-metal paths:
+The shipped low-level layers include implemented paths for:
 
-- `core::mem`: pure-Uinx `memcpy`, `memmove`, `memset`, byte-copy/move/fill;
-- `core::ptr`: volatile `u8/u32/u64` MMIO loads and stores;
-- `core::atomic`: compiler-lowered `AtomicU64` operations;
-- `core::sync`: a freestanding `SpinLock`;
-- typed raw-pointer arithmetic and `deref (...) = value` for allocators, page tables, DMA buffers, and memory code.
+- `core::mem` byte copy/move/fill primitives;
+- `core::ptr` volatile MMIO helpers;
+- `core::atomic` compiler-lowered atomics;
+- `core::sync` spin locking;
+- typed raw-pointer arithmetic and dereference assignment;
+- `alloc`, minimal hosted facilities, and the fuller `std` layer where selected.
 
 ```uinx
 public unsafe func clear(base: mutptr u8, size: usize) -> unit:
@@ -232,15 +287,10 @@ public unsafe func clear(base: mutptr u8, size: usize) -> unit:
     return
 ```
 
-# Performance
+## Build the toolchain
 
-The MIR optimizer now performs more than unreachable-block cleanup. At optimization levels that enable it, Uinx runs local-load forwarding, integer/boolean constant folding, and dead pure-SSA value elimination before LLVM optimization.
-
-Concurrency strengthening also avoids unnecessary contention: `percpu` stays CPU-local, `smp auto` uses acquire/release/acq_rel rather than forcing seq_cst everywhere, and `smp manual` can disable all implicit promotion when a kernel wants to own the memory model explicitly.
-
-# Build Uinx
-
-Requirements include CMake, a C++20 compiler, LLVM development files, Clang for the tested package link flow, and LLD for bare-metal kernel linking.
+Requirements: CMake, a C++20 compiler, LLVM development files, Clang for the tested
+host package link flow, and LLD for the bare-metal link flow.
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -265,36 +315,42 @@ cd app
 ../build/uinx run
 ```
 
-Main commands include `new`, `build`, `run`, `check`, `test`, `fmt`, `lint`, `doc`, `fetch`, and `add`.
+Main commands include `new`, `build`, `run`, `check`, `test`, `fmt`, `lint`, `doc`,
+`fetch`, and `add`.
 
-# Formatting
-
-The repository ships a canonical `.clang-format`:
+### Formatting
 
 ```sh
 cmake --build build --target format
 cmake --build build --target format-check
-```
-
-Uinx source can be formatted with:
-
-```sh
 uinx fmt
 ```
 
-# Documentation
+## Bootstrap status
 
-| Document | Contents |
+The canonical stage-0 compiler in this repository is still **C++20**. The language
+has the control-flow and computational expressiveness needed for compiler work, but
+a complete Uinx implementation of the Uinx compiler is not shipped in this tree yet.
+Therefore this release must **not** be described as self-hosted.
+
+`docs/BOOTSTRAP.md` defines the stage0 → stage1 → stage2 reproducibility criteria a
+real self-hosting release must pass. This is intentionally stated as an engineering
+boundary rather than hidden behind a wrapper that simply invokes the C++ compiler.
+
+## Documentation
+
+| Document | Purpose |
 |---|---|
-| `docs/LANGUAGE_SPEC.md` | canonical implemented syntax |
-| `docs/MEMORY_MODEL.md` | ownership, atomics, SMP modes, fences, per-CPU rules |
-| `docs/OS_DEVELOPMENT.md` | bare-metal kernel workflow |
-| `docs/UNSAFE_AND_ASM.md` | unsafe and inline assembly |
-| `docs/STANDARD_LIBRARY.md` | core/alloc/minimal/std layers |
-| `docs/VERIFICATION.md` | release verification scope |
+| `docs/LANGUAGE_SPEC.md` | canonical implemented grammar and semantics |
+| `docs/MEMORY_MODEL.md` | ownership, aliasing, atomics, SMP, fences |
+| `docs/BOOTSTRAP.md` | honest self-hosting/bootstrap acceptance criteria |
+| `docs/OS_DEVELOPMENT.md` | freestanding kernel workflow |
+| `docs/UNSAFE_AND_ASM.md` | unsafe boundary and inline assembly |
+| `docs/STANDARD_LIBRARY.md` | core / alloc / minimal / std layers |
+| `docs/VERIFICATION.md` | reproducible verification procedure |
 | `docs/RELEASE_STATUS.md` | implemented vs unverified boundaries |
 
-# License
+## License
 
 Uinx is released under the **BSD 3-Clause License**.
 
@@ -303,10 +359,10 @@ Copyright (c) 2026 ViudiraTech
 Code by JiTianYu391
 ```
 
-See [`LICENSE`](LICENSE) for the complete license text.
+See [`LICENSE`](LICENSE).
 
 <div align="center">
 
-**Uinx — readable enough for application code, explicit enough for a kernel.**
+**Uinx — readable at the surface, explicit at the machine boundary.**
 
 </div>

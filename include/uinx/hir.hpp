@@ -22,6 +22,7 @@ struct Module {
     std::unordered_map<std::string, SymbolId> globals;
     std::unordered_map<const ast::Expr*, SymbolId> expr_resolution;
     std::unordered_map<const ast::LetStmt*, SymbolId> bindings;
+    std::unordered_map<const ast::ForStmt*, SymbolId> for_bindings;
     std::unordered_map<const ast::Param*, SymbolId> params;
 };
 } // namespace uinx::hir
