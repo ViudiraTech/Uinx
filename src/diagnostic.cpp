@@ -28,6 +28,9 @@ void Diagnostics::report(Diagnostic d) {
     }
     diags_.push_back(std::move(d));
 }
+void Diagnostics::note(const SourceRange& r, std::string code, std::string msg) {
+    report({DiagLevel::Note, r, std::move(code), std::move(msg), {}});
+}
 void Diagnostics::error(const SourceRange& r, std::string code, std::string msg) {
     report({DiagLevel::Error, r, std::move(code), std::move(msg), {}});
 }

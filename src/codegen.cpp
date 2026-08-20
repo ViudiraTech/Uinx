@@ -875,6 +875,10 @@ void LLVMCodegen::emit_async_function(
                     const Type from = value_types.contains(instruction.args[0])
                                           ? value_types[instruction.args[0]]
                                           : Type::builtin("i32");
+                    if (from.kind == TypeKind::Str && instruction.type.kind == TypeKind::RawPtr) {
+                        store_result(instruction, value);
+                        break;
+                    }
                     std::string opcode;
                     if (from.kind == TypeKind::RawPtr && instruction.type.is_integer())
                         opcode = "ptrtoint";
@@ -1379,9 +1383,10 @@ void LLVMCodegen::emit_function(
                     const Type from = value_types.contains(instruction.args[0])
                                           ? value_types[instruction.args[0]]
                                           : Type::builtin("i32");
-                    if ((from.kind == TypeKind::Ref || from.kind == TypeKind::RawPtr) &&
-                        (instruction.type.kind == TypeKind::Ref ||
-                         instruction.type.kind == TypeKind::RawPtr)) {
+                    if ((from.kind == TypeKind::Str && instruction.type.kind == TypeKind::RawPtr) ||
+                        ((from.kind == TypeKind::Ref || from.kind == TypeKind::RawPtr) &&
+                         (instruction.type.kind == TypeKind::Ref ||
+                          instruction.type.kind == TypeKind::RawPtr))) {
                         values[instruction.result] = value_of(instruction.args[0]);
                         value_types[instruction.result] = instruction.type;
                         break;

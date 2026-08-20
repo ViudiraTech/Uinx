@@ -19,6 +19,8 @@ struct CompileOptions {
     bool keep_temps{false};
     bool verify_ir{true};
     bool freestanding{false};
+    // Apply only conservative parser fix-its in memory before compiling.
+    bool auto_repair{false};
     std::string code_model;
     std::optional<ast::SmpMode> smp_mode_override;
     std::vector<std::string> linker_args;

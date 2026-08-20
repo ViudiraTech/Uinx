@@ -25,6 +25,83 @@ bool read_source_file(const std::filesystem::path& path, std::string& out) {
     return static_cast<bool>(file) || file.eof();
 }
 
+struct SourceRepair {
+    std::uint32_t offset{};
+    std::string text;
+    std::string description;
+};
+
+std::optional<SourceRepair> parser_repair(const Diagnostic& diagnostic) {
+    if (diagnostic.code == "E0111")
+        return SourceRepair{diagnostic.range.begin.offset,
+                            ";",
+                            "inserted a missing statement terminator"};
+
+    if (diagnostic.code != "E0100")
+        return std::nullopt;
+
+    const bool at_boundary = diagnostic.message.find("found newline") != std::string::npos ||
+                             diagnostic.message.find("found Newline") != std::string::npos ||
+                             diagnostic.message.find("found dedent") != std::string::npos ||
+                             diagnostic.message.find("found Dedent") != std::string::npos ||
+                             diagnostic.message.find("found end of file") != std::string::npos ||
+                             diagnostic.message.find("found End") != std::string::npos ||
+                             diagnostic.message.find("found end") != std::string::npos;
+    if (!at_boundary)
+        return std::nullopt;
+
+    const std::pair<std::string_view, std::string_view> delimiters[] = {
+        {"expected ')'", ")"},
+        {"expected ']'", "]"},
+        {"expected '}'", "}"},
+    };
+    for (const auto& [expected, replacement] : delimiters) {
+        if (diagnostic.message.find(expected) != std::string::npos)
+            return SourceRepair{diagnostic.range.begin.offset,
+                                std::string(replacement),
+                                "inserted a missing closing delimiter"};
+    }
+    return std::nullopt;
+}
+
+bool repair_source(std::string_view file,
+                   std::string& source,
+                   Diagnostics& diagnostics,
+                   std::size_t max_repairs = 32) {
+    bool changed = false;
+    for (std::size_t attempt = 0; attempt < max_repairs; ++attempt) {
+        Diagnostics probe;
+        Lexer lexer(std::string(file), source, probe);
+        auto tokens = lexer.lex();
+        if (probe.has_errors())
+            break;
+        Parser parser(std::move(tokens), probe);
+        parser.parse_module(std::string(file));
+
+        std::optional<SourceRepair> repair;
+        SourceRange repair_range;
+        for (const auto& diagnostic : probe.all()) {
+            if (diagnostic.level != DiagLevel::Error)
+                continue;
+            auto candidate = parser_repair(diagnostic);
+            if (!candidate || candidate->offset > source.size())
+                continue;
+            repair = std::move(candidate);
+            repair_range = diagnostic.range;
+            break;
+        }
+        if (!repair)
+            break;
+
+        source.insert(repair->offset, repair->text);
+        diagnostics.note(repair_range,
+                         "N0001",
+                         "auto-repair: " + repair->description + " (source kept unchanged)");
+        changed = true;
+    }
+    return changed;
+}
+
 } // namespace
 
 std::string Compiler::shell_quote(std::string_view value) {
@@ -86,6 +163,8 @@ CompileResult Compiler::compile_files(const std::vector<std::filesystem::path>& 
             diags_.error(range, "E0700", "cannot open source file");
             continue;
         }
+        if (options.auto_repair)
+            repair_source(path.string(), source, diags_);
         Lexer lexer(path.string(), source, diags_);
         auto tokens = lexer.lex();
         if (diags_.has_errors())
@@ -123,6 +202,8 @@ CompileResult Compiler::compile_files(const std::vector<std::filesystem::path>& 
 
 CompileResult
 Compiler::compile_source(std::string file, std::string source, const CompileOptions& options) {
+    if (options.auto_repair)
+        repair_source(file, source, diags_);
     Lexer lexer(file, source, diags_);
     auto tokens = lexer.lex();
     if (diags_.has_errors())

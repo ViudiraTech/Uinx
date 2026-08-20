@@ -21,6 +21,7 @@ class Diagnostics {
     explicit Diagnostics(std::ostream* stream = nullptr) : stream_(stream) {
     }
     void report(Diagnostic d);
+    void note(const SourceRange& r, std::string code, std::string msg);
     void error(const SourceRange& r, std::string code, std::string msg);
     void warning(const SourceRange& r, std::string code, std::string msg);
     [[nodiscard]] bool has_errors() const;

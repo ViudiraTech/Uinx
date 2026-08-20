@@ -14,7 +14,7 @@ namespace {
 void usage() {
     std::cout << "uinxc <file.ux> [more.ux ...] [-o output] [--emit=check|llvm-ir|obj|exe] "
                  "[-O0..3] [--target=TRIPLE] [--clang=PATH] [--smp=auto|manual|strict] "
-                 "[--freestanding] [--keep-temps] [--no-verify-ir]\n";
+                 "[--freestanding] [--repair] [--keep-temps] [--no-verify-ir]\n";
 }
 } // namespace
 
@@ -79,6 +79,10 @@ int main(int argc, char** argv) {
         }
         if (arg == "--freestanding") {
             options.freestanding = true;
+            continue;
+        }
+        if (arg == "--repair" || arg == "--fix") {
+            options.auto_repair = true;
             continue;
         }
         if (arg == "--keep-temps") {

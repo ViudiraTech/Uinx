@@ -35,6 +35,9 @@ bool integer_literal(const ast::Expr* expr) {
 bool can_coerce_expr(const ast::Expr* expr, const Type& from, const Type& to) {
     if (can_coerce(from, to))
         return true;
+    if (expr && expr->kind == ast::ExprKind::String && from.kind == TypeKind::Ref &&
+        from.pointee && from.pointee->kind == TypeKind::Str && to.kind == TypeKind::Str)
+        return true;
     return integer_literal(expr) && from.is_integer() && to.is_integer();
 }
 
@@ -1446,9 +1449,12 @@ Type TypeChecker::check_expr(const ast::Expr& e, FnContext& c, bool) {
                                  "E0332",
                                  "cannot create mutable raw pointer from shared reference");
             } else if ((from.kind == TypeKind::RawPtr || to.kind == TypeKind::RawPtr) &&
+                       !(from.kind == TypeKind::Str && to.kind == TypeKind::RawPtr) &&
                        !c.unsafe_context)
                 diags_.error(e.range, "E0331", "this raw pointer cast requires unsafe context");
-            if (!(from.is_numeric() && to.is_numeric()) && !ref_to_raw &&
+            const bool str_to_raw = from.kind == TypeKind::Str && to.kind == TypeKind::RawPtr &&
+                                    to.pointee && to.pointee->kind == TypeKind::U8;
+            if (!(from.is_numeric() && to.is_numeric()) && !ref_to_raw && !str_to_raw &&
                 from.kind != TypeKind::RawPtr && to.kind != TypeKind::RawPtr)
                 diags_.error(e.range,
                              "E0332",
