@@ -402,7 +402,8 @@ int build_kernel(const std::filesystem::path& root,
                  const Manifest& manifest,
                  bool release,
                  std::filesystem::path* output_path = nullptr,
-                 std::optional<ast::SmpMode> smp_override = std::nullopt) {
+                 std::optional<ast::SmpMode> smp_override = std::nullopt,
+                 bool auto_repair = false) {
     const auto target = kernel_target(manifest.arch.empty() ? "x86_64" : manifest.arch);
     if (!target) {
         std::cerr << "unsupported kernel architecture '" << manifest.arch
@@ -430,6 +431,7 @@ int build_kernel(const std::filesystem::path& root,
     options.target_triple = target->triple;
     options.opt_level = release ? 3 : 1;
     options.freestanding = true;
+    options.auto_repair = auto_repair;
     options.smp_mode_override = smp_override;
     if (manifest.arch == "riscv64")
         options.code_model = "medany";
@@ -462,7 +464,8 @@ int build_project(const std::filesystem::path& root,
                   EmitKind emit,
                   bool release,
                   std::filesystem::path* output_path = nullptr,
-                  std::optional<ast::SmpMode> smp_override = std::nullopt) {
+                  std::optional<ast::SmpMode> smp_override = std::nullopt,
+                  bool auto_repair = false) {
     std::vector<std::filesystem::path> sources;
     if (!collect_project_sources(root, manifest, sources))
         return 1;
@@ -470,6 +473,7 @@ int build_project(const std::filesystem::path& root,
     options.emit = emit;
     options.opt_level = release ? 3 : 0;
     options.smp_mode_override = smp_override;
+    options.auto_repair = auto_repair;
     const auto directory = root / "target" / (release ? "release" : "debug");
     std::filesystem::create_directories(directory);
     if (emit == EmitKind::Executable)
@@ -606,7 +610,7 @@ int generate_docs(const std::vector<std::filesystem::path>& sources,
 }
 
 void usage() {
-    std::cout << "uinx <new|build|run|check|test|fmt|lint|doc|fetch|add> [args]\n";
+    std::cout << "uinx <new|build|run|check|test|fmt|lint|doc|fetch|add> [args] [--repair]\n";
 }
 
 } // namespace
@@ -740,11 +744,14 @@ int main(int argc, char** argv) {
         return 1;
     }
     bool release = false;
+    bool auto_repair = false;
     std::optional<ast::SmpMode> smp_override;
     for (int i = 2; i < argc; ++i) {
         const std::string arg = argv[i];
         if (arg == "--release")
             release = true;
+        else if (arg == "--repair" || arg == "--fix")
+            auto_repair = true;
         else if (arg.rfind("--smp=", 0) == 0) {
             smp_override = parse_smp_mode(arg.substr(6));
             if (!smp_override) {
@@ -758,16 +765,18 @@ int main(int argc, char** argv) {
         return fetch(root, manifest);
     if (command == "build") {
         if (manifest.kind == "kernel")
-            return build_kernel(root, manifest, release, nullptr, smp_override);
+            return build_kernel(root, manifest, release, nullptr, smp_override, auto_repair);
         return build_project(root,
                              manifest,
                              manifest.kind == "lib" ? EmitKind::Object : EmitKind::Executable,
                              release,
                              nullptr,
-                             smp_override);
+                             smp_override,
+                             auto_repair);
     }
     if (command == "check")
-        return build_project(root, manifest, EmitKind::Check, release, nullptr, smp_override);
+        return build_project(
+            root, manifest, EmitKind::Check, release, nullptr, smp_override, auto_repair);
     if (command == "run") {
         if (manifest.kind == "lib" || manifest.kind == "kernel") {
             std::cerr << "cannot host-run a " << manifest.kind << " package\n";
@@ -775,7 +784,13 @@ int main(int argc, char** argv) {
         }
         std::filesystem::path executable;
         const int result =
-            build_project(root, manifest, EmitKind::Executable, release, &executable, smp_override);
+            build_project(root,
+                          manifest,
+                          EmitKind::Executable,
+                          release,
+                          &executable,
+                          smp_override,
+                          auto_repair);
         if (result)
             return result;
         return std::system(("\"" + executable.string() + "\"").c_str());
@@ -806,6 +821,7 @@ int main(int argc, char** argv) {
             CompileOptions options;
             options.emit = EmitKind::Executable;
             options.smp_mode_override = smp_override;
+            options.auto_repair = auto_repair;
             options.output = root / "target/tests" / test.stem();
             const auto runtime = runtime_library();
             const auto selection = source_selection(root, manifest);
@@ -838,6 +854,7 @@ int main(int argc, char** argv) {
         CompileOptions options;
         options.emit = EmitKind::Check;
         options.smp_mode_override = smp_override;
+        options.auto_repair = auto_repair;
         Compiler compiler(&std::cerr);
         const auto result = compiler.compile_files(sources, options);
         if (result.success)
