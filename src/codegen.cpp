@@ -41,6 +41,86 @@ int integer_bits(const Type& type) {
     }
 }
 
+std::string llvm_integer_constant(std::string_view literal) {
+    bool negative = false;
+    std::size_t offset = 0;
+    if (!literal.empty() && literal.front() == '-') {
+        negative = true;
+        offset = 1;
+    }
+
+    unsigned base = 10;
+    if (literal.size() >= offset + 2 && literal[offset] == '0') {
+        switch (literal[offset + 1]) {
+            case 'x':
+            case 'X':
+                base = 16;
+                offset += 2;
+                break;
+            case 'b':
+            case 'B':
+                base = 2;
+                offset += 2;
+                break;
+            case 'o':
+            case 'O':
+                base = 8;
+                offset += 2;
+                break;
+            default:
+                break;
+        }
+    }
+
+    // Store the magnitude in base 1,000,000,000 so this also handles u128
+    // without narrowing through a host integer type.
+    std::vector<std::uint32_t> digits{0};
+    bool has_digit = false;
+    for (std::size_t i = offset; i < literal.size(); ++i) {
+        const char c = literal[i];
+        if (c == '_')
+            continue;
+        unsigned value = 0;
+        if (c >= '0' && c <= '9')
+            value = static_cast<unsigned>(c - '0');
+        else if (c >= 'a' && c <= 'f')
+            value = static_cast<unsigned>(c - 'a') + 10;
+        else if (c >= 'A' && c <= 'F')
+            value = static_cast<unsigned>(c - 'A') + 10;
+        else
+            return std::string(literal);
+        if (value >= base)
+            return std::string(literal);
+
+        has_digit = true;
+        std::uint64_t carry = value;
+        for (auto& digit : digits) {
+            const std::uint64_t next = static_cast<std::uint64_t>(digit) * base + carry;
+            digit = static_cast<std::uint32_t>(next % 1000000000U);
+            carry = next / 1000000000U;
+        }
+        if (carry != 0)
+            digits.push_back(static_cast<std::uint32_t>(carry));
+    }
+    if (!has_digit)
+        return std::string(literal);
+
+    while (digits.size() > 1 && digits.back() == 0)
+        digits.pop_back();
+    if (digits.size() == 1 && digits.front() == 0)
+        return "0";
+
+    std::string result = std::to_string(digits.back());
+    for (std::size_t i = digits.size() - 1; i > 0; --i) {
+        const std::string chunk = std::to_string(digits[i - 1]);
+        result.append(9 - chunk.size(), '0');
+        result += chunk;
+    }
+    if (negative)
+        result.insert(result.begin(), '-');
+    return result;
+}
+
 std::string arithmetic_opcode(const Type& type, std::string_view op) {
     if (op == "+")
         return type.is_float() ? "fadd" : "add";
@@ -576,6 +656,8 @@ void LLVMCodegen::emit_async_function(
                 case mir::Op::Alloca:
                     break;
                 case mir::Op::ConstInt:
+                    store_result(instruction, llvm_integer_constant(instruction.text));
+                    break;
                 case mir::Op::ConstFloat:
                 case mir::Op::ConstBool:
                 case mir::Op::ConstChar:
@@ -998,6 +1080,9 @@ void LLVMCodegen::emit_function(
                     value_types[instruction.result] = Type::raw_ptr(instruction.type, true);
                     break;
                 case mir::Op::ConstInt:
+                    values[instruction.result] = llvm_integer_constant(instruction.text);
+                    value_types[instruction.result] = instruction.type;
+                    break;
                 case mir::Op::ConstFloat:
                 case mir::Op::ConstBool:
                 case mir::Op::ConstChar:
@@ -1457,8 +1542,11 @@ std::string LLVMCodegen::emit(const mir::Module& module) {
         os << '@' << llvm_name(global.name) << " = ";
         if (global.is_percpu)
             os << "thread_local(localexec) ";
+        const std::string initializer = global.type.is_integer()
+                                            ? llvm_integer_constant(global.initializer)
+                                            : global.initializer;
         os << (global.is_mut ? "global " : "constant ") << llvm_type(global.type) << ' '
-           << global.initializer << ", align " << type_alignment(global.type) << "\n";
+           << initializer << ", align " << type_alignment(global.type) << "\n";
     }
     if (!module.globals.empty())
         os << '\n';
