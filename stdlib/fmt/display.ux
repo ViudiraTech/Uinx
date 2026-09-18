@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# Uinx fmt::display
+# Number and string formatting primitives. These lower to the runtime's
+# uinx_print_* hooks, which write through os::file::write on the hosted build.
+dontneed std
+
+public const STDOUT: i32 = 1
+public const STDERR: i32 = 2
+
+unsafe extern "C" func uinx_print_cstr(value: ptr u8, fd: i32) -> unit
+unsafe extern "C" func uinx_print_i64(value: i64, fd: i32) -> unit
+unsafe extern "C" func uinx_print_u64(value: u64, fd: i32) -> unit
+unsafe extern "C" func uinx_print_f64(value: f64, fd: i32) -> unit
+unsafe extern "C" func uinx_print_bool(value: i64, fd: i32) -> unit
+unsafe extern "C" func uinx_print_char(value: u32, fd: i32) -> unit
+unsafe extern "C" func uinx_print_space(fd: i32) -> unit
+unsafe extern "C" func uinx_print_newline(fd: i32) -> unit

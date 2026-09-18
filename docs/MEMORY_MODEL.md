@@ -49,6 +49,37 @@ public unsafe concurrent func secondary_cpu_entry() -> unit:
 
 Concurrency is propagated through the call graph. If a `concurrent` entry calls `scheduler_tick()`, helpers reachable from that entry are analyzed as concurrent too. It is not necessary to annotate every helper manually.
 
+Every parameter of a `concurrent` function is checked as a transfer boundary.
+By-value and mutable-reference parameters must satisfy `Send`; shared references
+must satisfy `Send`, which means their pointee must satisfy `Sync`. This prevents
+an unsynchronized pointer-owning type from being moved into a concurrent path
+without a reviewed abstraction.
+
+### Automatic `Send` and `Sync`
+
+`Send` means a value can move to another thread/CPU; `Sync` means a shared
+reference to it can be used concurrently. Uinx derives both structurally for
+compiler-visible types:
+
+- scalar and immutable shared-reference rules follow the usual Rust model;
+- `ref T: Send` requires `T: Sync`;
+- `mutref T: Send` requires `T: Send`;
+- named types require every concrete field to satisfy the requested trait;
+- generic fields use their declared bounds;
+- raw pointers satisfy neither trait by default.
+
+An owning abstraction that must encapsulate a raw pointer can make a small,
+reviewed assertion:
+
+```uinx
+unsafe send Box[T] where T: Send
+unsafe sync Box[T] where T: Send + Sync
+```
+
+The syntax is intentionally minimal. `unsafe send Type` asserts unconditional
+`Send`; `unsafe sync Type` asserts unconditional `Sync`; an optional
+indentation-free `where` clause supplies conditional generic bounds.
+
 ## Shared state
 
 Explicit shared state uses `shared`:
@@ -65,7 +96,7 @@ Atomic-compatible scalar `shared` globals and fields are lowered to LLVM atomic 
 
 In `smp auto` and `smp strict`, mutable scalar globals reached from a concurrent call path are also promoted to shared storage by semantic analysis. Atomic-compatible fields of mutable global structures can be promoted field-by-field. Once promoted, every compiler-visible access to that global/field is atomic, including accesses from a non-`concurrent` observer.
 
-The compiler does **not** pretend that making individual fields atomic makes an arbitrary multi-field invariant safe. If a concurrent path touches aggregate state that cannot be safely strengthened as one atomic object, the compiler emits `W0360`; use explicit shared fields, a lock, per-CPU storage, or another protocol.
+The compiler does **not** pretend that making individual fields atomic makes an arbitrary multi-field invariant safe. If a concurrent path touches aggregate state that cannot be safely strengthened as one atomic object, compilation fails with `E0363`; use explicit shared fields, a lock, per-CPU storage, or another protocol.
 
 ## SMP policy
 
@@ -179,4 +210,4 @@ Automatic SMP strengthening is intentionally bounded by what the compiler can pr
 
 ## Verification status
 
-The release tests verify IR-level atomic lowering, automatic call-graph propagation, automatic shared promotion, manual/strict policy behavior, TLS lowering for `percpu`, explicit fences, and cross-target object generation. The memory model is not a machine-checked proof of race freedom for all possible unsafe/FFI/kernel code.
+The release tests verify IR-level atomic lowering, automatic call-graph propagation, automatic shared promotion, manual/strict policy behavior, TLS lowering for `percpu`, explicit fences, concurrent-boundary `Send` checks, structural `Send`/`Sync` derivation, and cross-target object generation. The memory model is not a machine-checked proof of race freedom for all possible unsafe/FFI/kernel code.

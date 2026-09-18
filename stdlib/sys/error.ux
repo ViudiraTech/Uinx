@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# Uinx sys::error
+# Errno values as returned by the raw trap layer. A negative return from a
+# uinx_syscallN call is the negated errno, matching the Linux/POSIX convention
+# observed by the compiler's syscall lowering.
+dontneed std
+
+public const EPERM: i64 = 1
+public const ENOENT: i64 = 2
+public const ESRCH: i64 = 3
+public const EINTR: i64 = 4
+public const EIO: i64 = 5
+public const ENXIO: i64 = 6
+public const E2BIG: i64 = 7
+public const ENOEXEC: i64 = 8
+public const EBADF: i64 = 9
+public const ECHILD: i64 = 10
+public const EAGAIN: i64 = 11
+public const ENOMEM: i64 = 12
+public const EACCES: i64 = 13
+public const EFAULT: i64 = 14
+public const EBUSY: i64 = 16
+public const EEXIST: i64 = 17
+public const ENODEV: i64 = 19
+public const ENOTDIR: i64 = 20
+public const EISDIR: i64 = 21
+public const EINVAL: i64 = 22
+public const ENFILE: i64 = 23
+public const EMFILE: i64 = 24
+public const ENOTTY: i64 = 25
+public const EFBIG: i64 = 27
+public const ENOSPC: i64 = 28
+public const ESPIPE: i64 = 29
+public const EROFS: i64 = 30
+public const EPIPE: i64 = 32
+public const ERANGE: i64 = 34
+public const ENOSYS: i64 = 38
+public const EOVERFLOW: i64 = 75
+
+# True when a raw trap result encodes a kernel error.
+public func is_error(result: i64) -> bool:
+    return result < 0 and result >= -4095
+
+# Extract the positive errno from a raw trap result (0 when it is not an error).
+public func errno_of(result: i64) -> i64:
+    if result < 0 and result >= -4095:
+        return 0 - result
+    return 0

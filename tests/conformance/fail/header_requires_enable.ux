@@ -2,7 +2,8 @@
 # Copyright (c) 2026 ViudiraTech
 # By JiTianYu391
 
-# Uinx std::thread
+# EXPECT-DIAGNOSTIC: E0712
+need "missing.uxh"
 
-public struct JoinHandle:
-    handle: usize
+def main() -> i32:
+    return 0

@@ -2,10 +2,14 @@
 # Copyright (c) 2026 ViudiraTech
 # By JiTianYu391
 
-# Uinx full std root
+# Uinx std root
+# The full hosted standard library facade. Concrete primitives live in the
+# lower layers: sys (raw traps), os (descriptor/thread/process surface) and
+# fmt (formatting and parsing). This layer carries the version surface; handle
+# types such as File/TcpStream/UdpSocket are owned by the os layer.
 
 public func std_version_major() -> i32:
     return 0
 
 public func std_version_minor() -> i32:
-    return 1
+    return 2

@@ -14,7 +14,8 @@ namespace {
 void usage() {
     std::cout << "uinxc <file.ux> [more.ux ...] [-o output] [--emit=check|llvm-ir|obj|exe] "
                  "[-O0..3] [--target=TRIPLE] [--clang=PATH] [--smp=auto|manual|strict] "
-                 "[--freestanding] [--repair] [--keep-temps] [--no-verify-ir]\n";
+                 "[-enable-header] [-I DIR] [--freestanding] [--repair] [--keep-temps] "
+                 "[--no-verify-ir]\n";
 }
 } // namespace
 
@@ -61,6 +62,22 @@ int main(int argc, char** argv) {
         }
         if (arg.rfind("--clang=", 0) == 0) {
             options.clang = arg.substr(8);
+            continue;
+        }
+        if (arg == "-enable-header" || arg == "--enable-header") {
+            options.enable_header = true;
+            continue;
+        }
+        if (arg == "-I") {
+            if (i + 1 >= argc) {
+                std::cerr << "-I requires a directory\n";
+                return 2;
+            }
+            options.include_dirs.emplace_back(argv[++i]);
+            continue;
+        }
+        if (arg.rfind("-I", 0) == 0 && arg.size() > 2) {
+            options.include_dirs.emplace_back(arg.substr(2));
             continue;
         }
         if (arg.rfind("--smp=", 0) == 0) {

@@ -2,10 +2,15 @@
 # Copyright (c) 2026 ViudiraTech
 # By JiTianYu391
 
-# Uinx minimal::sync
+# Uinx os::sync
+# Mutual-exclusion primitives backed by the hosted synchronization hooks.
+dontneed std
 
 public struct Mutex:
     raw: mutptr u8
+
+unsafe send Mutex
+unsafe sync Mutex
 
 unsafe extern "C" func uinx_mutex_new() -> mutptr u8
 unsafe extern "C" func uinx_mutex_lock(mutex: mutptr u8) -> i32

@@ -2,7 +2,8 @@
 # Copyright (c) 2026 ViudiraTech
 # By JiTianYu391
 
-# Uinx minimal::time
+# Uinx os::time
+dontneed std
 
 extern "C" func uinx_time_monotonic_ns() -> u64
 

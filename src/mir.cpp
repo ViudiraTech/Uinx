@@ -17,6 +17,12 @@ bool unsigned_integer_kind(TypeKind kind) {
     return kind == TypeKind::U8 || kind == TypeKind::U16 || kind == TypeKind::U32 ||
            kind == TypeKind::U64 || kind == TypeKind::U128 || kind == TypeKind::Usize;
 }
+
+bool builtin_function(std::string_view name) {
+    static const std::unordered_set<std::string_view> names{
+        "print", "println", "eprint", "eprintln", "input", "str", "int", "float", "bool", "len"};
+    return names.contains(name);
+}
 } // namespace
 std::string MIRLowerer::temp(FnState& s) {
     return "%t" + std::to_string(s.temp_counter++);
@@ -40,12 +46,48 @@ void MIRLowerer::emit(FnState& s, mir::Instruction i) {
         block(s).terminated = true;
     block(s).instructions.push_back(std::move(i));
 }
+void MIRLowerer::declare_runtime_function(std::string name,
+                                          Type result,
+                                          std::vector<mir::Parameter> params) {
+    for (const auto& function : out_.functions)
+        if (function.name == name)
+            return;
+    mir::Function declaration;
+    declaration.name = name;
+    declaration.source_name = name;
+    declaration.result = std::move(result);
+    declaration.params = std::move(params);
+    declaration.is_extern = true;
+    out_.functions.push_back(std::move(declaration));
+}
 Type MIRLowerer::subst_type(const Type& t, const FnState& s) const {
     return substitute_type(t, s.subst);
 }
 Type MIRLowerer::expr_type(const ast::Expr& e, const FnState& s) const {
     auto it = model_.expr_types.find(&e);
     return it == model_.expr_types.end() ? Type{} : subst_type(it->second, s);
+}
+std::string MIRLowerer::coerce_value(FnState& s,
+                                     std::string value,
+                                     const Type& from,
+                                     const Type& to,
+                                     const SourceRange& range) {
+    if (from == to || value == "undef" || value.empty())
+        return value;
+    // Integer literals are allowed to coerce across widths in sema
+    // (`can_coerce_expr`); materialize that as an explicit MIR cast so the
+    // backend never sees mismatched operand types (e.g. i32 temp stored into
+    // an i64 slot, or `sub i32` feeding `icmp sge i64`).
+    const bool int_to_int = from.is_integer() && to.is_integer();
+    const bool bool_to_int = from.kind == TypeKind::Bool && to.is_integer();
+    const bool int_to_float = from.is_integer() && to.is_float();
+    const bool float_to_float = from.is_float() && to.is_float();
+    const bool float_to_int = from.is_float() && to.is_integer();
+    if (!int_to_int && !bool_to_int && !int_to_float && !float_to_float && !float_to_int)
+        return value;
+    std::string out = temp(s);
+    emit(s, {mir::Op::Cast, out, to, {value}, from.str(), {}, false, range});
+    return out;
 }
 std::string MIRLowerer::intern_string(std::string v) {
     for (const auto& s : out_.strings)
@@ -131,7 +173,7 @@ void MIRLowerer::lower_function(const ast::FunctionDecl& d,
     FnState s;
     s.fn.name = emitted;
     s.fn.source_name = d.name;
-    s.fn.is_extern = d.is_extern;
+    s.fn.is_extern = d.is_extern || !d.body;
     s.fn.is_unsafe = d.is_unsafe;
     s.fn.is_async = d.is_async;
     s.fn.abi = d.abi;
@@ -247,10 +289,10 @@ std::string MIRLowerer::rmw_order(const ast::Expr& e, const FnState& s) const {
 void MIRLowerer::lower_stmt(const ast::Stmt& st, FnState& s) {
     if (auto l = dynamic_cast<const ast::LetStmt*>(&st)) {
         auto [v, init_ty] = lower_expr(*l->init, s);
-        (void)init_ty;
         Type t = init_ty;
         if (auto it = model_.binding_types.find(l); it != model_.binding_types.end())
             t = subst_type(it->second, s);
+        v = coerce_value(s, v, init_ty, t, l->range);
         std::string sl = slot(s, l->name);
         s.slots[l->name] = sl;
         s.local_types[l->name] = t;
@@ -260,10 +302,27 @@ void MIRLowerer::lower_stmt(const ast::Stmt& st, FnState& s) {
         return;
     }
     if (auto a = dynamic_cast<const ast::AssignStmt*>(&st)) {
+        if (auto binding = model_.hir.assignment_bindings.find(a);
+            binding != model_.hir.assignment_bindings.end()) {
+            auto [v, init_ty] = lower_expr(*a->value, s);
+            Type t = init_ty;
+            if (auto it = model_.assignment_binding_types.find(a);
+                it != model_.assignment_binding_types.end())
+                t = subst_type(it->second, s);
+            v = coerce_value(s, v, init_ty, t, a->range);
+            const auto& name = static_cast<const ast::NameExpr&>(*a->target).name;
+            std::string sl = slot(s, name);
+            s.slots[name] = sl;
+            s.local_types[name] = t;
+            s.scope_locals.back().push_back(name);
+            emit(s, {mir::Op::Alloca, sl, t, {}, "", {}, false, a->range});
+            emit(s, {mir::Op::Store, "", t, {v, sl}, "", {}, false, a->range});
+            return;
+        }
         std::string addr = lower_place_address(*a->target, s);
         Type target_ty = expr_type(*a->target, s);
         auto [v, vt] = lower_expr(*a->value, s);
-        (void)vt;
+        v = coerce_value(s, v, vt, target_ty, a->range);
         const bool atomic = place_is_atomic(*a->target, s);
         if (atomic && a->op != "=") {
             const std::string op = a->op.substr(0, a->op.size() - 1);
@@ -312,7 +371,7 @@ void MIRLowerer::lower_stmt(const ast::Stmt& st, FnState& s) {
         emit_scope_drops(s);
         if (r->value) {
             auto [v, t] = lower_expr(*r->value, s);
-            (void)t;
+            v = coerce_value(s, v, t, s.fn.result, r->range);
             emit(s, {mir::Op::Return, "", s.fn.result, {v}, "", {}, false, r->range});
         } else
             emit(s, {mir::Op::Return, "", Type::builtin("unit"), {}, "", {}, false, r->range});
@@ -732,20 +791,51 @@ std::pair<std::string, Type> MIRLowerer::lower_expr(const ast::Expr& e, FnState&
             std::string r = temp(s);
             std::string zero = temp(s);
             if (u.op == "-") {
-                emit(s, {mir::Op::ConstInt, zero, t, {}, "0", {}, false, e.range});
-                emit(s, {mir::Op::Binary, r, t, {zero, v}, "-", {}, false, e.range});
-            } else
-                emit(s, {mir::Op::Binary, r, t, {v}, u.op, {}, false, e.range});
+                // `ty` is the (possibly coerced) result type from sema, while `t`
+                // is the inner operand's own type. For `-literal` coerced to a
+                // wider integer (e.g. `result >= -4095` with result: i64), using
+                // `t` here emits `sub i32` whose result is later used as i64 and
+                // produces invalid `icmp sge i64 %x, %y(i32)` IR at -O0
+                // (-O2 hides it via constant folding). Lower in `ty` instead,
+                // casting the operand up when needed.
+                std::string operand = v;
+                if (t != ty) {
+                    std::string casted = temp(s);
+                    emit(s, {mir::Op::Cast, casted, ty, {v}, t.str(), {}, false, e.range});
+                    operand = casted;
+                }
+                if (ty.is_float()) {
+                    emit(s, {mir::Op::ConstFloat, zero, ty, {}, "0.0", {}, false, e.range});
+                } else {
+                    emit(s, {mir::Op::ConstInt, zero, ty, {}, "0", {}, false, e.range});
+                }
+                emit(s, {mir::Op::Binary, r, ty, {zero, operand}, "-", {}, false, e.range});
+            } else {
+                std::string operand = v;
+                if (t != ty) {
+                    std::string casted = temp(s);
+                    emit(s, {mir::Op::Cast, casted, ty, {v}, t.str(), {}, false, e.range});
+                    operand = casted;
+                }
+                emit(s, {mir::Op::Binary, r, ty, {operand}, u.op, {}, false, e.range});
+            }
             return {r, ty};
         }
         case ast::ExprKind::Binary: {
             auto& b = static_cast<const ast::BinaryExpr&>(e);
             auto [l, lt] = lower_expr(*b.lhs, s);
             auto [r, rt] = lower_expr(*b.rhs, s);
-            (void)rt;
             std::string out = temp(s);
             bool cmp = b.op == "==" || b.op == "!=" || b.op == "<" || b.op == "<=" || b.op == ">" ||
                        b.op == ">=";
+            if (cmp) {
+                // Comparison operands must share one LLVM integer type.
+                l = coerce_value(s, l, lt, lt, b.lhs->range);
+                r = coerce_value(s, r, rt, lt, b.rhs->range);
+            } else {
+                l = coerce_value(s, l, lt, ty, b.lhs->range);
+                r = coerce_value(s, r, rt, ty, b.rhs->range);
+            }
             emit(s,
                  {cmp ? mir::Op::Compare : mir::Op::Binary,
                   out,
@@ -759,6 +849,11 @@ std::pair<std::string, Type> MIRLowerer::lower_expr(const ast::Expr& e, FnState&
         }
         case ast::ExprKind::Call: {
             auto& c = static_cast<const ast::CallExpr&>(e);
+            if (c.callee->kind == ast::ExprKind::Name) {
+                const auto& name = static_cast<const ast::NameExpr&>(*c.callee).name;
+                if (builtin_function(name))
+                    return lower_builtin_call(c, s);
+            }
             std::string callee;
             std::vector<std::string> args;
             if (c.callee->kind == ast::ExprKind::Name) {
@@ -767,8 +862,17 @@ std::pair<std::string, Type> MIRLowerer::lower_expr(const ast::Expr& e, FnState&
                 callee = n.name;
                 if (fi != model_.functions.end())
                     callee = specialize_call(c, fi->second, s);
-                for (auto& a : c.args)
-                    args.push_back(lower_expr(*a, s).first);
+                for (std::size_t i = 0; i < c.args.size(); ++i) {
+                    auto [v, actual] = lower_expr(*c.args[i], s);
+                    if (fi != model_.functions.end() && i < fi->second.params.size()) {
+                        Type expected = subst_type(fi->second.params[i], s);
+                        // For generic callees the formal may still be generic;
+                        // coerce_value is a no-op unless it is a concrete
+                        // int/bool/float mismatch (e.g. i32 literal -> i64 param).
+                        v = coerce_value(s, v, actual, expected, c.args[i]->range);
+                    }
+                    args.push_back(v);
+                }
             } else if (c.callee->kind == ast::ExprKind::Member) {
                 auto& member = static_cast<const ast::MemberExpr&>(*c.callee);
                 Type receiver_ty = expr_type(*member.base, s);
@@ -789,8 +893,17 @@ std::pair<std::string, Type> MIRLowerer::lower_expr(const ast::Expr& e, FnState&
                         args.push_back(lower_place_address(*member.base, s));
                 } else
                     args.push_back(lower_expr(*member.base, s).first);
-                for (auto& a : c.args)
-                    args.push_back(lower_expr(*a, s).first);
+                // Method params[0] is the receiver already handled above.
+                const std::size_t param_offset =
+                    fi->second.params.empty() ? 0 : args.size() - c.args.size();
+                for (std::size_t i = 0; i < c.args.size(); ++i) {
+                    auto [v, actual] = lower_expr(*c.args[i], s);
+                    if (param_offset + i < fi->second.params.size()) {
+                        Type expected = subst_type(fi->second.params[param_offset + i], s);
+                        v = coerce_value(s, v, actual, expected, c.args[i]->range);
+                    }
+                    args.push_back(v);
+                }
             } else {
                 diags_.error(
                     e.range, "E0507", "internal: unsupported call target during MIR lowering");
@@ -867,6 +980,198 @@ std::pair<std::string, Type> MIRLowerer::lower_expr(const ast::Expr& e, FnState&
         }
     }
     return {"undef", ty};
+}
+
+std::pair<std::string, Type> MIRLowerer::lower_builtin_call(const ast::CallExpr& call, FnState& s) {
+    const auto& name = static_cast<const ast::NameExpr&>(*call.callee).name;
+    const Type result = expr_type(call, s);
+    auto declare_call = [&](const std::string& runtime_name,
+                            const Type& runtime_result,
+                            const std::vector<Type>& parameter_types) {
+        std::vector<mir::Parameter> parameters;
+        for (std::size_t i = 0; i < parameter_types.size(); ++i)
+            parameters.push_back({"p" + std::to_string(i), parameter_types[i]});
+        declare_runtime_function(runtime_name, runtime_result, std::move(parameters));
+    };
+    auto runtime_call = [&](const std::string& runtime_name,
+                            const Type& runtime_result,
+                            const std::vector<Type>& parameter_types,
+                            std::vector<std::string> arguments,
+                            const SourceRange& range) {
+        declare_call(runtime_name, runtime_result, parameter_types);
+        const std::string output = runtime_result.is_unit() ? "" : temp(s);
+        emit(s,
+             {mir::Op::Call,
+              output,
+              runtime_result,
+              std::move(arguments),
+              runtime_name,
+              {},
+              false,
+              range});
+        return output;
+    };
+    auto cast_value =
+        [&](const std::string& value, const Type& from, const Type& to, const SourceRange& range) {
+            if (from == to)
+                return value;
+            const std::string output = temp(s);
+            emit(s, {mir::Op::Cast, output, to, {value}, from.str(), {}, false, range});
+            return output;
+        };
+
+    if (name == "print" || name == "println" || name == "eprint" || name == "eprintln") {
+        const bool stderr_output = name == "eprint" || name == "eprintln";
+        const Type i32 = Type::builtin("i32");
+        const Type fd_type = i32;
+        const std::string fd = temp(s);
+        emit(
+            s,
+            {mir::Op::ConstInt, fd, fd_type, {}, stderr_output ? "2" : "1", {}, false, call.range});
+
+        for (std::size_t i = 0; i < call.args.size(); ++i) {
+            if (i != 0) {
+                runtime_call(
+                    "uinx_print_space", Type::builtin("unit"), {fd_type}, {fd}, call.range);
+            }
+            auto [value, type] = lower_expr(*call.args[i], s);
+            if (type.is_integer() && type.kind != TypeKind::I128 && type.kind != TypeKind::U128) {
+                const Type target = Type::builtin(unsigned_integer_kind(type.kind) ? "u64" : "i64");
+                value = cast_value(value, type, target, call.args[i]->range);
+                runtime_call(unsigned_integer_kind(type.kind) ? "uinx_print_u64" : "uinx_print_i64",
+                             Type::builtin("unit"),
+                             {target, fd_type},
+                             {value, fd},
+                             call.args[i]->range);
+            } else if (type.is_float()) {
+                value = cast_value(value, type, Type::builtin("f64"), call.args[i]->range);
+                runtime_call("uinx_print_f64",
+                             Type::builtin("unit"),
+                             {Type::builtin("f64"), fd_type},
+                             {value, fd},
+                             call.args[i]->range);
+            } else if (type.kind == TypeKind::Bool) {
+                value = cast_value(value, type, Type::builtin("i64"), call.args[i]->range);
+                runtime_call("uinx_print_bool",
+                             Type::builtin("unit"),
+                             {Type::builtin("i64"), fd_type},
+                             {value, fd},
+                             call.args[i]->range);
+            } else if (type.kind == TypeKind::Char) {
+                runtime_call("uinx_print_char",
+                             Type::builtin("unit"),
+                             {Type::builtin("i32"), fd_type},
+                             {value, fd},
+                             call.args[i]->range);
+            } else {
+                runtime_call("uinx_print_cstr",
+                             Type::builtin("unit"),
+                             {Type::ref(Type::builtin("str"), false), fd_type},
+                             {value, fd},
+                             call.args[i]->range);
+            }
+        }
+        runtime_call("uinx_print_newline", Type::builtin("unit"), {fd_type}, {fd}, call.range);
+        return {"", Type::builtin("unit")};
+    }
+
+    if (name == "input") {
+        const Type str_ref = Type::ref(Type::builtin("str"), false);
+        std::string prompt = "null";
+        if (!call.args.empty())
+            prompt = lower_expr(*call.args[0], s).first;
+        const std::string fd = temp(s);
+        emit(s, {mir::Op::ConstInt, fd, Type::builtin("i32"), {}, "1", {}, false, call.range});
+        return {runtime_call("uinx_input_cstr",
+                             str_ref,
+                             {str_ref, Type::builtin("i32")},
+                             {prompt, fd},
+                             call.range),
+                str_ref};
+    }
+
+    auto [value, type] = lower_expr(*call.args[0], s);
+    const Type str_ref = Type::ref(Type::builtin("str"), false);
+    const auto is_string = [](const Type& checked) {
+        return checked.kind == TypeKind::Str || (checked.kind == TypeKind::Ref && checked.pointee &&
+                                                 checked.pointee->kind == TypeKind::Str);
+    };
+    if (name == "str") {
+        if (is_string(type))
+            return {value, str_ref};
+        if (type.is_integer()) {
+            const Type target = Type::builtin(unsigned_integer_kind(type.kind) ? "u64" : "i64");
+            value = cast_value(value, type, target, call.range);
+            return {runtime_call(unsigned_integer_kind(type.kind) ? "uinx_string_from_u64"
+                                                                  : "uinx_string_from_i64",
+                                 str_ref,
+                                 {target},
+                                 {value},
+                                 call.range),
+                    str_ref};
+        }
+        if (type.is_float()) {
+            value = cast_value(value, type, Type::builtin("f64"), call.range);
+            return {
+                runtime_call(
+                    "uinx_string_from_f64", str_ref, {Type::builtin("f64")}, {value}, call.range),
+                str_ref};
+        }
+        if (type.kind == TypeKind::Bool) {
+            value = cast_value(value, type, Type::builtin("i64"), call.range);
+            return {
+                runtime_call(
+                    "uinx_string_from_bool", str_ref, {Type::builtin("i64")}, {value}, call.range),
+                str_ref};
+        }
+        if (type.kind == TypeKind::Char)
+            return {
+                runtime_call(
+                    "uinx_string_from_char", str_ref, {Type::builtin("i32")}, {value}, call.range),
+                str_ref};
+    }
+    if (name == "int" || name == "float") {
+        const Type target = Type::builtin(name == "int" ? "i64" : "f64");
+        if (is_string(type)) {
+            return {runtime_call(name == "int" ? "uinx_parse_i64_cstr" : "uinx_parse_f64_cstr",
+                                 target,
+                                 {str_ref},
+                                 {value},
+                                 call.range),
+                    target};
+        }
+        return {cast_value(value, type, target, call.range), target};
+    }
+    if (name == "bool") {
+        if (type.kind == TypeKind::Bool)
+            return {value, type};
+        if (is_string(type)) {
+            const Type i64 = Type::builtin("i64");
+            value = runtime_call("uinx_parse_i64_cstr", i64, {str_ref}, {value}, call.range);
+            type = i64;
+        }
+        const std::string zero = temp(s);
+        emit(s, {mir::Op::ConstInt, zero, type, {}, "0", {}, false, call.range});
+        const std::string output = temp(s);
+        emit(s,
+             {mir::Op::Compare,
+              output,
+              Type::builtin("bool"),
+              {value, zero},
+              "!=",
+              {},
+              false,
+              call.range});
+        return {output, Type::builtin("bool")};
+    }
+    if (name == "len") {
+        if (is_string(type))
+            return {runtime_call(
+                        "uinx_cstr_len", Type::builtin("usize"), {str_ref}, {value}, call.range),
+                    Type::builtin("usize")};
+    }
+    diags_.error(call.range, "E0507", "internal: unsupported builtin lowering");
+    return {"undef", result};
 }
 void MIROptimizer::remove_unreachable(mir::Function& f) const {
     std::unordered_set<std::string> reachable;

@@ -46,6 +46,13 @@ struct ImplInfo {
     Type for_type;
     const ast::ImplDecl* decl{};
 };
+struct MarkerInfo {
+    std::string trait;
+    Type type;
+    std::vector<std::string> generic_names;
+    std::unordered_map<std::string, std::vector<std::string>> bounds;
+    const ast::MarkerDecl* decl{};
+};
 struct SemanticModel {
     hir::Module hir;
     std::unordered_map<std::string, FunctionSig> functions;
@@ -53,14 +60,20 @@ struct SemanticModel {
     std::unordered_map<std::string, GlobalInfo> globals;
     std::unordered_map<std::string, TraitInfo> traits;
     std::vector<ImplInfo> impls;
+    std::vector<MarkerInfo> markers;
     std::unordered_map<const ast::Expr*, Type> expr_types;
     std::unordered_map<const ast::LetStmt*, Type> binding_types;
+    std::unordered_map<const ast::AssignStmt*, Type> assignment_binding_types;
 };
 class TraitSolver {
   public:
     explicit TraitSolver(const SemanticModel& model) : model_(model) {
     }
     bool satisfies(const Type& type, std::string_view trait) const;
+    bool satisfies(
+        const Type& type,
+        std::string_view trait,
+        const std::unordered_map<std::string, std::vector<std::string>>& generic_bounds) const;
 
   private:
     const SemanticModel& model_;
@@ -82,6 +95,7 @@ class TypeChecker {
     };
     void collect_items(const ast::Module& module);
     void validate_special_traits();
+    void validate_concurrency_boundaries();
     bool copy_eligible(const Type& type,
                        std::unordered_set<std::string>& visiting,
                        bool require_explicit_named_impl = true) const;
@@ -90,6 +104,7 @@ class TypeChecker {
     void check_stmt(const ast::Stmt& stmt, FnContext& ctx);
     Type check_expr(const ast::Expr& expr, FnContext& ctx, bool value_context = true);
     Type check_call(const ast::CallExpr& call, FnContext& ctx);
+    Type check_builtin_call(const ast::CallExpr& call, FnContext& ctx);
     Type lookup_local(std::string_view name, const FnContext& ctx, const SourceRange& range);
     bool is_mutable_binding(std::string_view name, const FnContext& ctx) const;
     bool is_mutable_place(const ast::Expr& expr, const FnContext& ctx);

@@ -312,6 +312,13 @@ struct ImplDecl {
     TypeRef for_type;
     std::vector<FunctionDecl> methods;
 };
+enum class MarkerKind { Send, Sync };
+struct MarkerDecl {
+    SourceRange range{};
+    MarkerKind kind{MarkerKind::Send};
+    TypeRef type;
+    std::vector<GenericParam> generics;
+};
 enum class SmpMode { Auto, Manual, Strict };
 struct GlobalDecl {
     SourceRange range{};
@@ -324,7 +331,7 @@ struct GlobalDecl {
     bool is_shared{false};
     bool is_percpu{false};
 };
-using Item = std::variant<FunctionDecl, StructDecl, TraitDecl, ImplDecl, GlobalDecl>;
+using Item = std::variant<FunctionDecl, StructDecl, TraitDecl, ImplDecl, GlobalDecl, MarkerDecl>;
 struct Module {
     std::string file;
     bool no_std{false};

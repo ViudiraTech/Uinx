@@ -5,6 +5,7 @@
 #include "runtime.h"
 
 #include <errno.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -134,6 +135,131 @@ int32_t uinx_file_close(int64_t fd) {
 #else
     return close((int)fd) == 0 ? 0 : -errno;
 #endif
+}
+static void write_all(int32_t fd, const char* data, size_t len) {
+    while (len != 0) {
+        int64_t written = uinx_file_write(fd, data, len);
+        if (written <= 0)
+            return;
+        data += (size_t)written;
+        len -= (size_t)written;
+    }
+}
+void uinx_print_cstr(const char* value, int32_t fd) {
+    static const char empty[] = "(null)";
+    if (!value)
+        value = empty;
+    write_all(fd, value, strlen(value));
+}
+void uinx_print_i64(int64_t value, int32_t fd) {
+    char buffer[32];
+    int len = snprintf(buffer, sizeof(buffer), "%" PRId64, value);
+    if (len > 0)
+        write_all(fd, buffer, (size_t)len);
+}
+void uinx_print_u64(uint64_t value, int32_t fd) {
+    char buffer[32];
+    int len = snprintf(buffer, sizeof(buffer), "%" PRIu64, value);
+    if (len > 0)
+        write_all(fd, buffer, (size_t)len);
+}
+void uinx_print_f64(double value, int32_t fd) {
+    char buffer[64];
+    int len = snprintf(buffer, sizeof(buffer), "%.15g", value);
+    if (len > 0)
+        write_all(fd, buffer, (size_t)len);
+}
+void uinx_print_bool(int64_t value, int32_t fd) {
+    static const char true_value[] = "True";
+    static const char false_value[] = "False";
+    if (value)
+        write_all(fd, true_value, sizeof(true_value) - 1);
+    else
+        write_all(fd, false_value, sizeof(false_value) - 1);
+}
+void uinx_print_char(uint32_t value, int32_t fd) {
+    char bytes[4];
+    size_t len = 0;
+    if (!uinx_utf8_encode(value, (uint8_t*)bytes, &len))
+        write_all(fd, bytes, len);
+}
+void uinx_print_space(int32_t fd) {
+    write_all(fd, " ", 1);
+}
+void uinx_print_newline(int32_t fd) {
+    write_all(fd, "\n", 1);
+}
+static _Thread_local char input_buffer[4096];
+const char* uinx_input_cstr(const char* prompt, int32_t fd) {
+    if (prompt)
+        uinx_print_cstr(prompt, fd);
+    size_t len = 0;
+    int ch;
+    while ((ch = fgetc(stdin)) != EOF && ch != '\n') {
+        if (len + 1 < sizeof(input_buffer))
+            input_buffer[len++] = (char)ch;
+    }
+    input_buffer[len] = '\0';
+    return input_buffer;
+}
+size_t uinx_cstr_len(const char* value) {
+    return value ? strlen(value) : 0;
+}
+int64_t uinx_parse_i64_cstr(const char* value) {
+    if (!value)
+        return 0;
+    char* end = NULL;
+    errno = 0;
+    long long parsed = strtoll(value, &end, 10);
+    if (errno != 0 || end == value)
+        return 0;
+    return (int64_t)parsed;
+}
+double uinx_parse_f64_cstr(const char* value) {
+    if (!value)
+        return 0.0;
+    char* end = NULL;
+    errno = 0;
+    double parsed = strtod(value, &end);
+    if (errno != 0 || end == value)
+        return 0.0;
+    return parsed;
+}
+static _Thread_local char string_ring[4][64];
+static _Thread_local unsigned string_ring_index;
+static char* next_string_slot(void) {
+    char* slot = string_ring[string_ring_index++ % 4];
+    slot[0] = '\0';
+    return slot;
+}
+const char* uinx_string_from_i64(int64_t value) {
+    char* buffer = next_string_slot();
+    snprintf(buffer, 64, "%" PRId64, value);
+    return buffer;
+}
+const char* uinx_string_from_u64(uint64_t value) {
+    char* buffer = next_string_slot();
+    snprintf(buffer, 64, "%" PRIu64, value);
+    return buffer;
+}
+const char* uinx_string_from_f64(double value) {
+    char* buffer = next_string_slot();
+    snprintf(buffer, 64, "%.15g", value);
+    return buffer;
+}
+const char* uinx_string_from_bool(int64_t value) {
+    return value ? "True" : "False";
+}
+const char* uinx_string_from_char(uint32_t value) {
+    char* buffer = next_string_slot();
+    size_t len = 0;
+    if (!uinx_utf8_encode(value, (uint8_t*)buffer, &len))
+        buffer[0] = '\0';
+    buffer[len] = '\0';
+    return buffer;
+}
+const char* uinx_string_from_cstr(const char* value) {
+    return value ? value : "";
 }
 int64_t uinx_socket(int32_t domain, int32_t type, int32_t protocol) {
 #if defined(_WIN32)

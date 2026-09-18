@@ -2,7 +2,15 @@
 # Copyright (c) 2026 ViudiraTech
 # By JiTianYu391
 
-# Uinx minimal::net
+# Uinx os::net
+# Socket descriptor primitives.
+dontneed std
+
+public struct TcpStream:
+    fd: i64
+
+public struct UdpSocket:
+    fd: i64
 
 extern "C" func uinx_socket(domain: i32, kind: i32, protocol: i32) -> i64
 unsafe extern "C" func uinx_socket_connect(fd: i64, addr: ptr u8, len: u32) -> i32

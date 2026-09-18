@@ -31,8 +31,8 @@ std::string display_place(std::string_view place) {
     const auto dot = place.find('.');
     const std::string_view root = place.substr(0, dot);
     const auto hash = root.rfind('#');
-    std::string shown = hash == std::string_view::npos ? std::string(root)
-                                                        : std::string(root.substr(0, hash));
+    std::string shown =
+        hash == std::string_view::npos ? std::string(root) : std::string(root.substr(0, hash));
     if (dot != std::string_view::npos)
         shown += std::string(place.substr(dot));
     return shown;
@@ -69,8 +69,7 @@ std::optional<std::string> BorrowChecker::place_of(const ast::Expr& expr) const 
         if (resolved != model_.hir.expr_resolution.end() &&
             resolved->second < model_.hir.symbols.size()) {
             const auto& symbol = model_.hir.symbols[resolved->second];
-            if (symbol.kind == hir::SymbolKind::Local ||
-                symbol.kind == hir::SymbolKind::Parameter)
+            if (symbol.kind == hir::SymbolKind::Local || symbol.kind == hir::SymbolKind::Parameter)
                 return symbol_key(name, resolved->second);
         }
         return name;
@@ -93,29 +92,30 @@ std::optional<std::string> BorrowChecker::place_of(const ast::Expr& expr) const 
 std::string BorrowChecker::binding_key(const ast::LetStmt& binding) const {
     const auto found = model_.hir.bindings.find(&binding);
     return found == model_.hir.bindings.end() ? binding.name
-                                               : symbol_key(binding.name, found->second);
+                                              : symbol_key(binding.name, found->second);
 }
 
 std::string BorrowChecker::parameter_key(const ast::Param& parameter) const {
     const auto found = model_.hir.params.find(&parameter);
     return found == model_.hir.params.end() ? parameter.name
-                                             : symbol_key(parameter.name, found->second);
+                                            : symbol_key(parameter.name, found->second);
 }
 
 std::string BorrowChecker::for_binding_key(const ast::ForStmt& loop) const {
     const auto found = model_.hir.for_bindings.find(&loop);
     return found == model_.hir.for_bindings.end() ? loop.name
-                                                   : symbol_key(loop.name, found->second);
+                                                  : symbol_key(loop.name, found->second);
 }
 
-std::vector<BorrowChecker::RefOrigin>
-BorrowChecker::reference_origins(const ast::Expr& expr, const State& state) const {
+std::vector<BorrowChecker::RefOrigin> BorrowChecker::reference_origins(const ast::Expr& expr,
+                                                                       const State& state) const {
     std::vector<RefOrigin> result;
     auto append = [&](std::vector<RefOrigin> more) {
         for (auto& origin : more) {
-            const bool duplicate = std::any_of(result.begin(), result.end(), [&](const RefOrigin& x) {
-                return same_origin(x, origin);
-            });
+            const bool duplicate =
+                std::any_of(result.begin(), result.end(), [&](const RefOrigin& x) {
+                    return same_origin(x, origin);
+                });
             if (!duplicate)
                 result.push_back(std::move(origin));
         }
@@ -174,7 +174,8 @@ BorrowChecker::reference_origins(const ast::Expr& expr, const State& state) cons
                         Type owner = receiver_type;
                         if (owner.kind == TypeKind::Ref && owner.pointee)
                             owner = *owner.pointee;
-                        const auto method = model_.functions.find(owner.name + "::" + member.member);
+                        const auto method =
+                            model_.functions.find(owner.name + "::" + member.member);
                         if (method != model_.functions.end() && !method->second.params.empty() &&
                             method->second.params.front().kind == TypeKind::Ref) {
                             if (receiver_type.kind == TypeKind::Ref) {
@@ -233,8 +234,7 @@ bool BorrowChecker::contains_reference(const Type& type,
     }
 
     std::unordered_map<std::string, Type> substitutions;
-    for (std::size_t i = 0;
-         i < structure->second.generic_names.size() && i < type.args.size();
+    for (std::size_t i = 0; i < structure->second.generic_names.size() && i < type.args.size();
          ++i) {
         substitutions[structure->second.generic_names[i]] = type.args[i];
     }
@@ -281,8 +281,8 @@ Type BorrowChecker::type_of_place(std::string_view place, const State& state) co
         if (type.kind == TypeKind::Ref && type.pointee)
             type = *type.pointee;
         if (field == "[*]") {
-            if (type.kind == TypeKind::Named &&
-                (type.name == "Slice" || type.name == "SliceMut") && !type.args.empty()) {
+            if (type.kind == TypeKind::Named && (type.name == "Slice" || type.name == "SliceMut") &&
+                !type.args.empty()) {
                 type = type.args[0];
             } else {
                 return {};
@@ -363,9 +363,9 @@ bool BorrowChecker::states_equivalent(const State& a, const State& b) const {
         if (found == b.ref_origins.end() || found->second.size() != origins.size())
             return false;
         for (const auto& origin : origins) {
-            if (std::none_of(found->second.begin(), found->second.end(), [&](const RefOrigin& other) {
-                    return same_origin(origin, other);
-                })) {
+            if (std::none_of(found->second.begin(),
+                             found->second.end(),
+                             [&](const RefOrigin& other) { return same_origin(origin, other); })) {
                 return false;
             }
         }
@@ -391,14 +391,13 @@ void BorrowChecker::kill_borrower(std::string_view borrower, State& state) {
 }
 
 void BorrowChecker::kill_borrowers_under(std::string_view borrower, State& state) {
-    state.borrows.erase(
-        std::remove_if(state.borrows.begin(),
-                       state.borrows.end(),
-                       [&](const Borrow& loan) {
-                           return loan.borrower == borrower ||
-                                  is_strict_child(borrower, loan.borrower);
-                       }),
-        state.borrows.end());
+    state.borrows.erase(std::remove_if(state.borrows.begin(),
+                                       state.borrows.end(),
+                                       [&](const Borrow& loan) {
+                                           return loan.borrower == borrower ||
+                                                  is_strict_child(borrower, loan.borrower);
+                                       }),
+                        state.borrows.end());
 }
 
 void BorrowChecker::set_reference_origins(const std::string& place,
@@ -436,9 +435,10 @@ void BorrowChecker::promote_reference_value(const std::string& borrower,
                        [&](const Borrow& loan) {
                            if (loan.borrower != "<temporary>")
                                return false;
-                           return std::any_of(origins.begin(), origins.end(), [&](const RefOrigin& o) {
-                               return overlaps(loan.place, o.place);
-                           });
+                           return std::any_of(
+                               origins.begin(), origins.end(), [&](const RefOrigin& o) {
+                                   return overlaps(loan.place, o.place);
+                               });
                        }),
         state.borrows.end());
 
@@ -510,9 +510,7 @@ void BorrowChecker::access_place(const std::string& place,
             return;
         }
     } else if (unavailable(place, state)) {
-        report_error(range,
-                     "E0400",
-                     "use of moved value/place '" + display_place(place) + "'");
+        report_error(range, "E0400", "use of moved value/place '" + display_place(place) + "'");
         return;
     }
 
@@ -548,8 +546,7 @@ void BorrowChecker::access_place(const std::string& place,
                 report_error(range,
                              "E0402",
                              "cannot mutably borrow '" + display_place(place) +
-                                 "' while borrow of '" + display_place(loan.place) +
-                                 "' is active");
+                                 "' while borrow of '" + display_place(loan.place) + "' is active");
             }
         }
         return;
@@ -655,9 +652,9 @@ BorrowChecker::LiveSet BorrowChecker::expression_uses(const ast::Expr& expr) con
 }
 
 BorrowChecker::LiveSet BorrowChecker::liveness_block(const ast::BlockStmt& block,
-                                                      const LiveSet& live_after,
-                                                      const LiveSet& break_live,
-                                                      const LiveSet& continue_live) {
+                                                     const LiveSet& live_after,
+                                                     const LiveSet& break_live,
+                                                     const LiveSet& continue_live) {
     LiveSet live = live_after;
     for (auto it = block.stmts.rbegin(); it != block.stmts.rend(); ++it)
         live = liveness_stmt(**it, live, break_live, continue_live);
@@ -665,9 +662,9 @@ BorrowChecker::LiveSet BorrowChecker::liveness_block(const ast::BlockStmt& block
 }
 
 BorrowChecker::LiveSet BorrowChecker::liveness_stmt(const ast::Stmt& stmt,
-                                                     const LiveSet& live_after,
-                                                     const LiveSet& break_live,
-                                                     const LiveSet& continue_live) {
+                                                    const LiveSet& live_after,
+                                                    const LiveSet& break_live,
+                                                    const LiveSet& continue_live) {
     live_after_[&stmt] = live_after;
     LiveSet before = live_after;
     auto add = [&](const LiveSet& values) { before.insert(values.begin(), values.end()); };
@@ -695,12 +692,10 @@ BorrowChecker::LiveSet BorrowChecker::liveness_stmt(const ast::Stmt& stmt,
     } else if (const auto* branch = dynamic_cast<const ast::IfStmt*>(&stmt)) {
         const LiveSet left =
             liveness_block(*branch->then_block, live_after, break_live, continue_live);
-        const LiveSet right = branch->else_block
-                                  ? liveness_block(*branch->else_block,
-                                                   live_after,
-                                                   break_live,
-                                                   continue_live)
-                                  : live_after;
+        const LiveSet right =
+            branch->else_block
+                ? liveness_block(*branch->else_block, live_after, break_live, continue_live)
+                : live_after;
         before = left;
         before.insert(right.begin(), right.end());
         add(expression_uses(*branch->condition));
@@ -708,8 +703,7 @@ BorrowChecker::LiveSet BorrowChecker::liveness_stmt(const ast::Stmt& stmt,
         LiveSet header = live_after;
         bool converged = false;
         for (std::size_t iteration = 0; iteration < kMaxDataflowIterations; ++iteration) {
-            const LiveSet body =
-                liveness_block(*while_stmt->body, header, live_after, header);
+            const LiveSet body = liveness_block(*while_stmt->body, header, live_after, header);
             LiveSet next = live_after;
             next.insert(body.begin(), body.end());
             const LiveSet condition = expression_uses(*while_stmt->condition);
@@ -789,19 +783,18 @@ void BorrowChecker::prepare_liveness(const ast::FunctionDecl& fn) {
 
 void BorrowChecker::expire_dead_loans(const ast::Stmt& stmt, State& state) {
     const auto live = live_before_.find(&stmt);
-    state.borrows.erase(
-        std::remove_if(state.borrows.begin(),
-                       state.borrows.end(),
-                       [&](const Borrow& loan) {
-                           if (loan.borrower == "<temporary>")
-                               return true;
-                           const std::string borrower_root = root_of(loan.borrower);
-                           if (model_.globals.contains(borrower_root))
-                               return false;
-                           return live == live_before_.end() ||
-                                  !live->second.contains(borrower_root);
-                       }),
-        state.borrows.end());
+    state.borrows.erase(std::remove_if(state.borrows.begin(),
+                                       state.borrows.end(),
+                                       [&](const Borrow& loan) {
+                                           if (loan.borrower == "<temporary>")
+                                               return true;
+                                           const std::string borrower_root = root_of(loan.borrower);
+                                           if (model_.globals.contains(borrower_root))
+                                               return false;
+                                           return live == live_before_.end() ||
+                                                  !live->second.contains(borrower_root);
+                                       }),
+                        state.borrows.end());
 }
 
 void BorrowChecker::merge_states(State& out, const State& left, const State& right) const {
@@ -866,23 +859,22 @@ void BorrowChecker::truncate_scopes(State& state, std::size_t depth) {
                 continue;
             for (const auto& origin : origins) {
                 if (locals.contains(root_of(origin.place))) {
-                    report_error(
-                        origin.range,
-                        "E0405",
-                        "reference stored in '" + display_place(borrower) +
-                            "' outlives local place '" + display_place(origin.place) + "'");
+                    report_error(origin.range,
+                                 "E0405",
+                                 "reference stored in '" + display_place(borrower) +
+                                     "' outlives local place '" + display_place(origin.place) +
+                                     "'");
                 }
             }
         }
 
         state.scopes.pop_back();
-        state.borrows.erase(
-            std::remove_if(state.borrows.begin(),
-                           state.borrows.end(),
-                           [&](const Borrow& loan) {
-                               return locals.contains(root_of(loan.borrower));
-                           }),
-            state.borrows.end());
+        state.borrows.erase(std::remove_if(state.borrows.begin(),
+                                           state.borrows.end(),
+                                           [&](const Borrow& loan) {
+                                               return locals.contains(root_of(loan.borrower));
+                                           }),
+                            state.borrows.end());
         for (auto it = state.moved.begin(); it != state.moved.end();) {
             if (locals.contains(root_of(*it)))
                 it = state.moved.erase(it);
@@ -916,7 +908,7 @@ void BorrowChecker::inspect_expr(const ast::Expr& expr, State& state, Access acc
             inspect_expr(*unary.operand,
                          state,
                          unary.op == "*" ? Access::Read
-                                          : (unary.op == "move" ? Access::Move : access));
+                                         : (unary.op == "move" ? Access::Move : access));
             break;
         }
         case ast::ExprKind::Binary: {
@@ -933,11 +925,7 @@ void BorrowChecker::inspect_expr(const ast::Expr& expr, State& state, Access acc
                 const auto origins = reference_origins(*borrow.target, state);
                 if (!origins.empty()) {
                     for (const auto& origin : origins)
-                        begin_borrow(origin.place,
-                                     "<temporary>",
-                                     borrow.mut,
-                                     expr.range,
-                                     state);
+                        begin_borrow(origin.place, "<temporary>", borrow.mut, expr.range, state);
                 } else {
                     inspect_expr(*borrow.target, state, Access::Read);
                 }
@@ -988,7 +976,8 @@ void BorrowChecker::inspect_expr(const ast::Expr& expr, State& state, Access acc
                     if (loan.borrower != "<temporary>" && is_stack_owned(loan.place, state)) {
                         report_error(expr.range,
                                      "E0407",
-                                     "safe reference to stack-owned place '" + display_place(loan.place) +
+                                     "safe reference to stack-owned place '" +
+                                         display_place(loan.place) +
                                          "' cannot remain live across await");
                     }
                 }
@@ -1042,6 +1031,28 @@ void BorrowChecker::check_stmt(const ast::Stmt& stmt, State& state) {
     }
 
     if (const auto* assign = dynamic_cast<const ast::AssignStmt*>(&stmt)) {
+        if (auto binding = model_.hir.assignment_bindings.find(assign);
+            binding != model_.hir.assignment_bindings.end()) {
+            const auto& name = static_cast<const ast::NameExpr&>(*assign->target).name;
+            const std::string key = symbol_key(name, binding->second);
+            Type type{};
+            if (auto found = model_.assignment_binding_types.find(assign);
+                found != model_.assignment_binding_types.end())
+                type = found->second;
+
+            std::vector<RefOrigin> origins = reference_origins(*assign->value, state);
+            inspect_expr(*assign->value, state, Access::Move);
+            state.scopes.back()[key] = type;
+            mark_initialized(key, state);
+            std::unordered_set<std::string> visiting;
+            if (contains_reference(type, visiting) && !origins.empty()) {
+                set_reference_origins(key, {}, state);
+                bind_reference_expression(key, *assign->value, state);
+            } else {
+                set_reference_origins(key, {}, state);
+            }
+            return;
+        }
         const auto target = place_of(*assign->target);
         const Type target_type = target ? type_of_place(*target, state) : Type{};
         std::vector<RefOrigin> origins = reference_origins(*assign->value, state);
@@ -1084,8 +1095,8 @@ void BorrowChecker::check_stmt(const ast::Stmt& stmt, State& state) {
                     if (is_stack_owned(origin.place, state)) {
                         report_error(ret->value->range,
                                      "E0404",
-                                     "reference to stack-owned place '" + display_place(origin.place) +
-                                         "' escapes the function");
+                                     "reference to stack-owned place '" +
+                                         display_place(origin.place) + "' escapes the function");
                     }
                 }
             }

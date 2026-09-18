@@ -19,3 +19,6 @@ unsafe extern "C" func uinx_vec_drop(vec: mutptr RawVec) -> unit
 
 public struct Vec[T]:
     raw: RawVec
+
+unsafe send Vec[T] where T: Send
+unsafe sync Vec[T] where T: Send + Sync

@@ -37,6 +37,11 @@ class LLVMCodegen {
                          std::unordered_map<std::string, std::string>& values,
                          std::unordered_map<std::string, Type>& value_types,
                          std::size_t& asm_counter) const;
+    bool emit_syscall(std::ostream& os,
+                      const mir::Instruction& in,
+                      std::unordered_map<std::string, std::string>& values,
+                      std::unordered_map<std::string, Type>& value_types,
+                      std::size_t& counter) const;
     Diagnostics& diags_;
     TargetInfo target_;
 };

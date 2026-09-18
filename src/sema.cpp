@@ -35,8 +35,8 @@ bool integer_literal(const ast::Expr* expr) {
 bool can_coerce_expr(const ast::Expr* expr, const Type& from, const Type& to) {
     if (can_coerce(from, to))
         return true;
-    if (expr && expr->kind == ast::ExprKind::String && from.kind == TypeKind::Ref &&
-        from.pointee && from.pointee->kind == TypeKind::Str && to.kind == TypeKind::Str)
+    if (expr && expr->kind == ast::ExprKind::String && from.kind == TypeKind::Ref && from.pointee &&
+        from.pointee->kind == TypeKind::Str && to.kind == TypeKind::Str)
         return true;
     return integer_literal(expr) && from.is_integer() && to.is_integer();
 }
@@ -59,6 +59,12 @@ bool static_initializer_expr(const ast::Expr& expr) {
             });
     }
     return false;
+}
+
+bool builtin_function(std::string_view name) {
+    static const std::unordered_set<std::string_view> names{
+        "print", "println", "eprint", "eprintln", "input", "str", "int", "float", "bool", "len"};
+    return names.contains(name);
 }
 } // namespace
 hir::SymbolId NameResolver::add(hir::Module& out,
@@ -153,6 +159,20 @@ void NameResolver::resolve_block(
                 scopes.back()[l->name] = id;
             out.bindings[l] = id;
         } else if (auto a = dynamic_cast<const ast::AssignStmt*>(&s)) {
+            if (a->op == "=" && a->target->kind == ast::ExprKind::Name) {
+                const auto& name = static_cast<const ast::NameExpr&>(*a->target).name;
+                bool resolved = out.globals.contains(name);
+                for (auto it = scopes.rbegin(); !resolved && it != scopes.rend(); ++it)
+                    resolved = it->contains(name);
+                if (!resolved) {
+                    resolve_expr(out, *a->value, scopes);
+                    auto id = add(out, hir::SymbolKind::Local, name, a->target->range, owner);
+                    scopes.back()[name] = id;
+                    out.assignment_bindings[a] = id;
+                    out.expr_resolution[a->target.get()] = id;
+                    continue;
+                }
+            }
             resolve_expr(out, *a->target, scopes);
             resolve_expr(out, *a->value, scopes);
         } else if (auto e = dynamic_cast<const ast::ExprStmt*>(&s)) {
@@ -206,6 +226,8 @@ void NameResolver::resolve_expr(
                 out.expr_resolution[&e] = g->second;
                 return;
             }
+            if (builtin_function(n.name))
+                return;
             diags_.error(e.range, "E0204", "unresolved name '" + n.name + "'");
             break;
         }
@@ -279,51 +301,140 @@ void NameResolver::resolve_expr(
 }
 
 bool TraitSolver::satisfies(const Type& type, std::string_view trait) const {
-    for (const auto& impl : model_.impls)
-        if (impl.trait == trait && impl.for_type == type)
-            return true;
+    return satisfies(type, trait, {});
+}
+
+bool TraitSolver::satisfies(
+    const Type& type,
+    std::string_view trait,
+    const std::unordered_map<std::string, std::vector<std::string>>& generic_bounds) const {
     if (trait == "Copy")
         return type.is_copy();
     if (trait != "Send" && trait != "Sync")
         return false;
 
-    std::unordered_set<std::string> visiting;
-    std::function<bool(const Type&)> auto_trait = [&](const Type& current) -> bool {
-        const std::string key = std::string(trait) + ":" + current.str();
-        if (!visiting.insert(key).second)
-            return true;
-        auto finish = [&](bool value) {
-            visiting.erase(key);
-            return value;
-        };
-        if (current.kind == TypeKind::RawPtr)
-            return finish(false);
-        if (current.kind == TypeKind::Ref && current.pointee) {
-            if (trait == "Send")
-                return finish(auto_trait(*current.pointee));
-            return finish(auto_trait(*current.pointee));
+    std::function<bool(const Type&, const Type&, std::unordered_map<std::string, Type>&)>
+        unify_pattern;
+    unify_pattern = [&](const Type& pattern,
+                        const Type& actual,
+                        std::unordered_map<std::string, Type>& substitutions) -> bool {
+        if (pattern.kind == TypeKind::Generic) {
+            auto [it, inserted] = substitutions.emplace(pattern.name, actual);
+            return inserted || it->second == actual;
         }
-        if (current.kind != TypeKind::Named)
-            return finish(current.is_copy());
-        for (const auto& impl : model_.impls)
-            if (impl.trait == trait && impl.for_type == current)
-                return finish(true);
-        auto structure = model_.structs.find(current.name);
-        if (structure == model_.structs.end())
-            return finish(false);
-        std::unordered_map<std::string, Type> subst;
-        for (std::size_t i = 0;
-             i < structure->second.generic_names.size() && i < current.args.size();
-             ++i)
-            subst[structure->second.generic_names[i]] = current.args[i];
-        for (const auto& [field_name, field_type] : structure->second.fields) {
-            (void)field_name;
-            if (!auto_trait(substitute_type(field_type, subst)))
-                return finish(false);
-        }
-        return finish(true);
+        if (pattern.kind != actual.kind || pattern.name != actual.name ||
+            pattern.mut != actual.mut || pattern.args.size() != actual.args.size())
+            return false;
+        if (static_cast<bool>(pattern.pointee) != static_cast<bool>(actual.pointee))
+            return false;
+        if (pattern.pointee && !unify_pattern(*pattern.pointee, *actual.pointee, substitutions))
+            return false;
+        for (std::size_t i = 0; i < pattern.args.size(); ++i)
+            if (!unify_pattern(pattern.args[i], actual.args[i], substitutions))
+                return false;
+        return true;
     };
-    return auto_trait(type);
+
+    std::function<bool(const Type&, std::string_view, std::size_t)> solve;
+    solve = [&](const Type& current, std::string_view current_trait, std::size_t depth) -> bool {
+        if (depth > 64)
+            return false;
+
+        for (const auto& impl : model_.impls)
+            if (impl.trait == current_trait && impl.for_type == current)
+                return true;
+
+        for (const auto& marker : model_.markers) {
+            if (marker.trait != current_trait)
+                continue;
+            std::unordered_map<std::string, Type> substitutions;
+            if (!unify_pattern(marker.type, current, substitutions))
+                continue;
+            bool valid = true;
+            for (const auto& [generic, bounds] : marker.bounds) {
+                auto actual = substitutions.find(generic);
+                if (actual == substitutions.end()) {
+                    valid = false;
+                    break;
+                }
+                for (const auto& bound : bounds) {
+                    if (!solve(actual->second, bound, depth + 1)) {
+                        valid = false;
+                        break;
+                    }
+                }
+                if (!valid)
+                    break;
+            }
+            if (valid)
+                return true;
+        }
+
+        if (current_trait != "Send" && current_trait != "Sync")
+            return false;
+
+        std::unordered_set<std::string> visiting;
+        std::function<bool(const Type&,
+                           std::string_view,
+                           std::unordered_set<std::string>&,
+                           std::unordered_set<std::string>)>
+            auto_trait;
+        std::unordered_set<std::string> assumed;
+        for (const auto& [generic, bounds] : generic_bounds)
+            for (const auto& bound : bounds)
+                assumed.insert(bound + ":" + generic);
+        auto_trait = [&](const Type& value,
+                         std::string_view value_trait,
+                         std::unordered_set<std::string>& active,
+                         std::unordered_set<std::string> assumptions) -> bool {
+            const std::string key = std::string(value_trait) + ":" + value.str();
+            if (!active.insert(key).second)
+                return true;
+            const auto finish = [&](bool result) {
+                active.erase(key);
+                return result;
+            };
+
+            if (value.kind == TypeKind::RawPtr)
+                return finish(false);
+            if (value.kind == TypeKind::Ref && value.pointee) {
+                if (value_trait == "Send" && value.mut)
+                    return finish(
+                        auto_trait(*value.pointee, "Send", active, std::move(assumptions)));
+                return finish(auto_trait(*value.pointee, "Sync", active, std::move(assumptions)));
+            }
+            if (value.kind == TypeKind::Generic)
+                return finish(assumptions.contains(std::string(value_trait) + ":" + value.name));
+            if (value.kind == TypeKind::Str)
+                return finish(true);
+            if (value.kind != TypeKind::Named)
+                return finish(value.is_copy());
+
+            auto structure = model_.structs.find(value.name);
+            if (structure == model_.structs.end())
+                return finish(false);
+            for (const auto& [generic, bounds] : structure->second.bounds)
+                if (std::find(bounds.begin(), bounds.end(), value_trait) != bounds.end())
+                    assumptions.insert(std::string(value_trait) + ":" + generic);
+
+            std::unordered_map<std::string, Type> substitutions;
+            for (std::size_t i = 0;
+                 i < structure->second.generic_names.size() && i < value.args.size();
+                 ++i)
+                substitutions[structure->second.generic_names[i]] = value.args[i];
+            for (const auto& [field_name, field_type] : structure->second.fields) {
+                (void)field_name;
+                if (!auto_trait(substitute_type(field_type, substitutions),
+                                value_trait,
+                                active,
+                                assumptions))
+                    return finish(false);
+            }
+            return finish(true);
+        };
+        return auto_trait(type, trait, visiting, assumed);
+    };
+    return solve(type, trait, 0);
 }
 void TypeChecker::collect_items(const ast::Module& module) {
     for (const auto& item : module.items) {
@@ -378,6 +489,21 @@ void TypeChecker::collect_items(const ast::Module& module) {
                                      "E0358",
                                      "shared fields require integer, bool, raw pointer, or "
                                      "atomic-compatible generic type");
+                    if (ft.kind == TypeKind::Generic) {
+                        const auto parameter = std::find_if(
+                            s->generics.begin(),
+                            s->generics.end(),
+                            [&](const ast::GenericParam& g) { return g.name == ft.name; });
+                        if (parameter == s->generics.end() ||
+                            std::find(parameter->bounds.begin(), parameter->bounds.end(), "Send") ==
+                                parameter->bounds.end() ||
+                            std::find(parameter->bounds.begin(), parameter->bounds.end(), "Sync") ==
+                                parameter->bounds.end())
+                            diags_.error(field.range,
+                                         "E0366",
+                                         "a shared generic field requires both Send and Sync "
+                                         "bounds");
+                    }
                 }
             }
             model_.structs[s->name] = std::move(info);
@@ -394,6 +520,18 @@ void TypeChecker::collect_items(const ast::Module& module) {
                 g->name, ty, g->is_mut, g->is_const, g->is_shared, g->is_percpu, g};
         } else if (auto t = std::get_if<ast::TraitDecl>(&item)) {
             model_.traits[t->name] = {t->name, t};
+        } else if (auto marker = std::get_if<ast::MarkerDecl>(&item)) {
+            std::unordered_set<std::string> gs;
+            MarkerInfo info;
+            info.trait = marker->kind == ast::MarkerKind::Send ? "Send" : "Sync";
+            info.decl = marker;
+            for (const auto& generic : marker->generics) {
+                gs.insert(generic.name);
+                info.generic_names.push_back(generic.name);
+                info.bounds[generic.name] = generic.bounds;
+            }
+            info.type = type_from_ast(marker->type, gs);
+            model_.markers.push_back(std::move(info));
         }
     }
     for (const auto& item : module.items)
@@ -495,9 +633,10 @@ bool TypeChecker::copy_eligible(const Type& type,
         return result;
     };
 
-    const bool has_drop = std::any_of(model_.impls.begin(), model_.impls.end(), [&](const ImplInfo& impl) {
-        return impl.trait == "Drop" && impl.for_type == type;
-    });
+    const bool has_drop =
+        std::any_of(model_.impls.begin(), model_.impls.end(), [&](const ImplInfo& impl) {
+            return impl.trait == "Drop" && impl.for_type == type;
+        });
     if (has_drop)
         return finish(false);
 
@@ -531,6 +670,14 @@ bool TypeChecker::copy_eligible(const Type& type,
 
 void TypeChecker::validate_special_traits() {
     for (const auto& impl : model_.impls) {
+        if (impl.trait == "Send" || impl.trait == "Sync") {
+            const SourceRange range = impl.decl ? impl.decl->range : SourceRange{};
+            diags_.error(range,
+                         "E0365",
+                         "use the simpler unsafe " + impl.trait +
+                             " declaration for an explicit thread-safety marker");
+            continue;
+        }
         if (impl.trait != "Copy")
             continue;
         std::unordered_set<std::string> visiting;
@@ -541,6 +688,29 @@ void TypeChecker::validate_special_traits() {
                          "type '" + impl.for_type.str() +
                              "' cannot implement Copy: every field must be Copy and Copy is "
                              "incompatible with mutable references or Drop");
+        }
+    }
+}
+
+void TypeChecker::validate_concurrency_boundaries() {
+    TraitSolver solver(model_);
+    for (const auto& [key, signature] : model_.functions) {
+        (void)key;
+        if (!signature.is_concurrent || !signature.decl)
+            continue;
+        for (std::size_t i = 0; i < signature.params.size(); ++i) {
+            const Type& parameter = signature.params[i];
+            if (solver.satisfies(parameter, "Send", signature.bounds))
+                continue;
+
+            const SourceRange range = i < signature.decl->params.size()
+                                          ? signature.decl->params[i].range
+                                          : signature.decl->range;
+            diags_.error(range,
+                         "E0362",
+                         "concurrent function parameter " + std::to_string(i + 1) + " of type '" +
+                             parameter.str() + "' is not Send; use an owning Send type, a shared " +
+                             "reference whose pointee is Sync, or add the required generic bound");
         }
     }
 }
@@ -590,6 +760,7 @@ SemanticModel TypeChecker::check(const ast::Module& module) {
         }
     }
     propagate_concurrency(module.smp_mode);
+    validate_concurrency_boundaries();
     return std::move(model_);
 }
 void TypeChecker::propagate_concurrency(ast::SmpMode mode) {
@@ -749,11 +920,11 @@ void TypeChecker::propagate_concurrency(ast::SmpMode mode) {
                 if (atomic_compatible(global->second.type)) {
                     global->second.is_shared = true;
                 } else if (warned_aggregates.insert(name).second) {
-                    diags_.warning(expr.range,
-                                   "W0360",
-                                   "concurrent access to aggregate global '" + name +
-                                       "' cannot be strengthened as one atomic object; mark atomic "
-                                       "fields shared, use a lock, or use percpu storage");
+                    diags_.error(expr.range,
+                                 "E0363",
+                                 "concurrent access to aggregate global '" + name +
+                                     "' cannot be strengthened as one atomic object; mark atomic "
+                                     "fields shared, use a lock, or use percpu storage");
                 }
             }
             return;
@@ -916,6 +1087,16 @@ void TypeChecker::check_stmt(const ast::Stmt& s, FnContext& c) {
         return;
     }
     if (auto a = dynamic_cast<const ast::AssignStmt*>(&s)) {
+        if (auto binding = model_.hir.assignment_bindings.find(a);
+            binding != model_.hir.assignment_bindings.end()) {
+            Type rhs = check_expr(*a->value, c);
+            model_.assignment_binding_types[a] = rhs;
+            model_.expr_types[a->target.get()] = rhs;
+            const auto& name = static_cast<const ast::NameExpr&>(*a->target).name;
+            c.scopes.back()[name] = rhs;
+            c.mutable_scopes.back().insert(name);
+            return;
+        }
         Type lhs = check_expr(*a->target, c, false), rhs = check_expr(*a->value, c);
         if (!is_mutable_place(*a->target, c))
             diags_.error(a->target->range, "E0333", "assignment requires a mutable place");
@@ -1085,6 +1266,8 @@ Type TypeChecker::check_call(const ast::CallExpr& call, FnContext& c) {
 
     if (call.callee->kind == ast::ExprKind::Name) {
         const auto& n = static_cast<const ast::NameExpr&>(*call.callee);
+        if (builtin_function(n.name))
+            return check_builtin_call(call, c);
         auto it = model_.functions.find(n.name);
         if (it == model_.functions.end()) {
             diags_.error(call.range, "E0307", "unknown function '" + n.name + "'");
@@ -1185,6 +1368,76 @@ Type TypeChecker::check_call(const ast::CallExpr& call, FnContext& c) {
     }
     Type result = substitute_type(sig->result, subst);
     return sig->is_async ? Type::named("Future", {result}) : result;
+}
+
+Type TypeChecker::check_builtin_call(const ast::CallExpr& call, FnContext& c) {
+    const auto& name = static_cast<const ast::NameExpr&>(*call.callee).name;
+    const auto string_like = [](const Type& type) {
+        return type.kind == TypeKind::Str ||
+               (type.kind == TypeKind::Ref && type.pointee && type.pointee->kind == TypeKind::Str);
+    };
+    const auto printable = [&](const Type& type) {
+        return type.is_integer() || type.is_float() || type.kind == TypeKind::Bool ||
+               type.kind == TypeKind::Char || string_like(type);
+    };
+    std::vector<Type> arguments;
+    for (const auto& argument : call.args)
+        arguments.push_back(check_expr(*argument, c));
+
+    if (name == "print" || name == "println" || name == "eprint" || name == "eprintln") {
+        for (std::size_t i = 0; i < arguments.size(); ++i)
+            if (!printable(arguments[i]))
+                diags_.error(call.args[i]->range,
+                             "E0367",
+                             "print argument has unsupported type '" + arguments[i].str() + "'");
+        return Type::builtin("unit");
+    }
+    if (name == "input") {
+        if (arguments.size() > 1)
+            diags_.error(call.range, "E0368", "input expects zero or one prompt argument");
+        if (!arguments.empty() && !string_like(arguments[0]))
+            diags_.error(call.args[0]->range, "E0369", "input prompt must be a string");
+        return Type::ref(Type::builtin("str"), false);
+    }
+    if (name == "str") {
+        if (arguments.size() != 1)
+            diags_.error(call.range, "E0370", "str expects exactly one argument");
+        else if (!printable(arguments[0]))
+            diags_.error(call.args[0]->range,
+                         "E0371",
+                         "str argument has unsupported type '" + arguments[0].str() + "'");
+        return Type::ref(Type::builtin("str"), false);
+    }
+    if (name == "int" || name == "float") {
+        if (arguments.size() != 1)
+            diags_.error(call.range, "E0370", name + " expects exactly one argument");
+        else if (!arguments[0].is_numeric() && !string_like(arguments[0]))
+            diags_.error(
+                call.args[0]->range, "E0372", name + " argument must be numeric or string-like");
+        return Type::builtin(name == "int" ? "i64" : "f64");
+    }
+    if (name == "bool") {
+        if (arguments.size() != 1)
+            diags_.error(call.range, "E0370", "bool expects exactly one argument");
+        else if (arguments[0].kind != TypeKind::Bool && !arguments[0].is_numeric() &&
+                 !string_like(arguments[0]))
+            diags_.error(
+                call.args[0]->range, "E0373", "bool argument must be scalar or string-like");
+        return Type::builtin("bool");
+    }
+    if (name == "len") {
+        if (arguments.size() != 1)
+            diags_.error(call.range, "E0370", "len expects exactly one argument");
+        else {
+            const Type& type = arguments[0];
+            if (!string_like(type))
+                diags_.error(call.args[0]->range,
+                             "E0374",
+                             "len is not implemented for type '" + type.str() + "'");
+        }
+        return Type::builtin("usize");
+    }
+    return {};
 }
 void TypeChecker::validate_asm(const ast::AsmExpr& a, FnContext& c) {
     if (!c.unsafe_context)
@@ -1331,9 +1584,22 @@ Type TypeChecker::check_expr(const ast::Expr& e, FnContext& c, bool) {
                 if (integer_literal(b.lhs.get()) && can_coerce_expr(b.lhs.get(), l, r)) {
                     l = r;
                     model_.expr_types[b.lhs.get()] = r;
+                    // `-literal` is a Unary node wrapping the Integer token; the
+                    // MIR unary lowering reads the inner operand type, so keep it
+                    // in sync or `sub i32` feeds an `i64` compare.
+                    if (b.lhs->kind == ast::ExprKind::Unary) {
+                        const auto& unary = static_cast<const ast::UnaryExpr&>(*b.lhs);
+                        if (unary.operand)
+                            model_.expr_types[unary.operand.get()] = r;
+                    }
                 } else if (integer_literal(b.rhs.get()) && can_coerce_expr(b.rhs.get(), r, l)) {
                     r = l;
                     model_.expr_types[b.rhs.get()] = l;
+                    if (b.rhs->kind == ast::ExprKind::Unary) {
+                        const auto& unary = static_cast<const ast::UnaryExpr&>(*b.rhs);
+                        if (unary.operand)
+                            model_.expr_types[unary.operand.get()] = l;
+                    }
                 }
             }
             if ((l.kind == TypeKind::RawPtr || r.kind == TypeKind::RawPtr) &&

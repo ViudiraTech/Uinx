@@ -5,6 +5,9 @@
 #include "uinx/parser.hpp"
 
 #include <algorithm>
+#include <cctype>
+#include <functional>
+#include <unordered_set>
 
 namespace uinx::ast {
 
@@ -302,7 +305,7 @@ std::vector<ast::GenericParam> Parser::parse_generics() {
         param.range.begin = name.range.begin;
         if (consume(TokenKind::Colon)) {
             do {
-                param.bounds.push_back(expect(TokenKind::Identifier, "trait bound").text);
+                param.bounds.push_back(expect_name("trait bound").text);
             } while (consume(TokenKind::Plus));
         }
         param.range.end = peek().range.begin;
@@ -330,7 +333,7 @@ void Parser::parse_where_clause(std::vector<ast::GenericParam>& params) {
         }
         expect(TokenKind::Colon, "':' after generic parameter in where clause");
         do {
-            const Token bound = expect(TokenKind::Identifier, "trait bound");
+            const Token bound = expect_name("trait bound");
             if (param != params.end() &&
                 std::find(param->bounds.begin(), param->bounds.end(), bound.text) ==
                     param->bounds.end())
@@ -388,7 +391,7 @@ ast::FunctionDecl Parser::parse_function(
     function.abi = std::move(abi);
     function.range.begin = peek().range.begin;
 
-    expect(TokenKind::KwFn, "func");
+    const Token function_keyword = expect(TokenKind::KwFn, "func");
     function.name = expect(TokenKind::Identifier, "function name").text;
     function.generics = parse_generics();
     expect(TokenKind::LParen, "'('");
@@ -404,7 +407,9 @@ ast::FunctionDecl Parser::parse_function(
         function.return_type.name = "unit";
     parse_where_clause(function.generics);
 
-    if (extern_ && (at(TokenKind::Newline) || at(TokenKind::Semicolon) || at(TokenKind::End))) {
+    const bool declaration_only = function_keyword.text == "def";
+    if ((extern_ || declaration_only) &&
+        (at(TokenKind::Newline) || at(TokenKind::Semicolon) || at(TokenKind::End))) {
         finish_line();
         function.body.reset();
     } else {
@@ -496,7 +501,7 @@ ast::ImplDecl Parser::parse_impl() {
     if (new_style) {
         impl.for_type = parse_type();
         if (consume(TokenKind::KwWith)) {
-            impl.trait_name = expect(TokenKind::Identifier, "trait name after 'with'").text;
+            impl.trait_name = expect_name("trait name after 'with'").text;
         }
     } else {
         ast::TypeRef first = parse_type();
@@ -534,6 +539,33 @@ ast::ImplDecl Parser::parse_impl() {
     end_suite(suite);
     impl.range.end = peek().range.begin;
     return impl;
+}
+
+ast::MarkerDecl Parser::parse_marker() {
+    ast::MarkerDecl marker;
+    marker.range.begin = peek().range.begin;
+    const Token keyword = advance();
+    marker.kind = keyword.text == "send" ? ast::MarkerKind::Send : ast::MarkerKind::Sync;
+    marker.type = parse_type();
+
+    std::unordered_set<std::string> seen;
+    std::function<void(const ast::TypeRef&)> collect_generics = [&](const ast::TypeRef& type) {
+        if (type.name.size() == 1 && std::isupper(static_cast<unsigned char>(type.name[0])) &&
+            seen.insert(type.name).second) {
+            ast::GenericParam parameter;
+            parameter.name = type.name;
+            parameter.range = type.range;
+            marker.generics.push_back(std::move(parameter));
+        }
+        for (const auto& argument : type.args)
+            collect_generics(argument);
+    };
+    for (const auto& argument : marker.type.args)
+        collect_generics(argument);
+    parse_where_clause(marker.generics);
+    marker.range.end = peek().range.begin;
+    finish_line();
+    return marker;
 }
 
 ast::GlobalDecl
@@ -646,6 +678,12 @@ ast::Module Parser::parse_module(std::string file) {
             module.items.emplace_back(parse_trait(pub));
         } else if (at(TokenKind::KwImpl)) {
             module.items.emplace_back(parse_impl());
+        } else if (unsafe_ && at(TokenKind::Identifier) &&
+                   (peek().text == "send" || peek().text == "sync")) {
+            module.items.emplace_back(parse_marker());
+        } else if (at(TokenKind::Identifier) && (peek().text == "send" || peek().text == "sync")) {
+            diags_.error(peek().range, "E0116", "send/sync safety markers require 'unsafe'");
+            synchronize_item();
         } else {
             diags_.error(peek().range, "E0102", "expected a top-level declaration");
             synchronize_item();

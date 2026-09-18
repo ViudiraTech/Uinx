@@ -51,6 +51,7 @@ class Parser {
     ast::StructDecl parse_struct(bool pub);
     ast::TraitDecl parse_trait(bool pub);
     ast::ImplDecl parse_impl();
+    ast::MarkerDecl parse_marker();
     ast::GlobalDecl
     parse_global(bool pub, bool is_const, bool is_static, bool is_shared, bool is_percpu);
     ast::Param parse_parameter();

@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# TEST: conformance.positive.implicit-assignment
+func main() -> i32:
+    answer = 40
+    answer = answer + 2
+    if answer == 42:
+        answer = answer + 1
+    return answer - 43

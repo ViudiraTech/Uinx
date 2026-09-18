@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# Uinx fmt::string
+# Value-to-string conversion primitives.
+dontneed std
+
+unsafe extern "C" func uinx_string_from_i64(value: i64) -> ptr u8
+unsafe extern "C" func uinx_string_from_u64(value: u64) -> ptr u8
+unsafe extern "C" func uinx_string_from_f64(value: f64) -> ptr u8
+unsafe extern "C" func uinx_string_from_bool(value: i64) -> ptr u8
+unsafe extern "C" func uinx_string_from_char(value: u32) -> ptr u8
+unsafe extern "C" func uinx_string_from_cstr(value: ptr u8) -> ptr u8

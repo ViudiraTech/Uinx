@@ -193,6 +193,36 @@ need core
 dependencies can be excluded the same way. `no_std;` remains migration syntax;
 `dontneed std` is canonical.
 
+## Header files
+
+Reusable declarations live in `.uxh` files and are enabled explicitly:
+
+```uinx
+# math.uxh
+def add(left: i32, right: i32) -> i32
+```
+
+```uinx
+# app.ux
+need "math.uxh"
+
+def add(left: i32, right: i32) -> i32:
+    return left + right
+
+def main() -> i32:
+    return add(20, 22) - 42
+```
+
+```sh
+uinxc app.ux -enable-header -I include -o app
+```
+
+Headers are loaded semantically rather than textually. The compiler resolves a
+canonical include-once identity, expands each `.uxh` file once, merges identical
+declarations, and rejects conflicting signatures or duplicate definitions. No
+include guard or `#pragma once` is needed. `def` is an indentation-friendly alias
+for `func`; a bodyless `def` is a declaration.
+
 ## OS-first concurrency
 
 ```uinx
@@ -213,6 +243,12 @@ public unsafe concurrent func secondary_cpu_entry() -> unit:
 
 `concurrent` propagates through the call graph. In `smp auto`, compatible mutable
 shared state reached by concurrent paths can be strengthened to atomic accesses.
+Concurrent parameters must be safe to transfer: by-value and mutable-reference
+types need `Send`, while shared references need the pointee to be `Sync`.
+`Send`/`Sync` are derived structurally from fields and generic bounds. Raw pointers
+are not transferable by default; a reviewed pointer-owning wrapper can opt in with
+the concise `unsafe send Type` / `unsafe sync Type` marker. Non-atomic aggregate
+state reached concurrently is rejected instead of receiving fake atomicity.
 For protocols that need explicit ordering:
 
 ```uinx

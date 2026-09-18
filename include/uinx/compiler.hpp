@@ -19,6 +19,8 @@ struct CompileOptions {
     bool keep_temps{false};
     bool verify_ir{true};
     bool freestanding{false};
+    bool enable_header{false};
+    std::vector<std::filesystem::path> include_dirs;
     // Apply only conservative parser fix-its in memory before compiling.
     bool auto_repair{false};
     std::string code_model;

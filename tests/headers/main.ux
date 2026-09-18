@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+need "a.uxh"
+need "b.uxh"
+need "decl_a.uxh"
+need "decl_b.uxh"
+need "math.uxh"
+
+def add(left: i32, right: i32) -> i32:
+    return left + right
+
+def combine(left: i32, right: i32) -> i32:
+    return left + right
+
+def main() -> i32:
+    return add(value_a(), value_b()) - combine(20, 22)

@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# EXPECT-DIAGNOSTIC: E0362
+dontneed std
+
+public unsafe concurrent func cpu_entry(state: mutptr u64) -> unit:
+    unsafe:
+        deref state = 1
+    return

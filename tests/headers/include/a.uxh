@@ -2,10 +2,7 @@
 # Copyright (c) 2026 ViudiraTech
 # By JiTianYu391
 
-# Uinx std::net
+need "common.uxh"
 
-public struct TcpStream:
-    fd: i64
-
-public struct UdpSocket:
-    fd: i64
+def value_a() -> i32:
+    return twice(20)

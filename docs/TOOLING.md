@@ -10,6 +10,8 @@ The direct compiler accepts source files and can check, emit LLVM IR, emit objec
 --target=<triple>
 --emit=check|llvm-ir|obj
 --smp=auto|manual|strict
+-enable-header
+-I <directory>
 ```
 
 Example:
@@ -17,6 +19,15 @@ Example:
 ```sh
 uinxc kernel.ux --target=x86_64-unknown-none --emit=obj -o kernel.o
 ```
+
+Header search is opt-in. Use `need "name.uxh"` in the source and repeat `-I`
+for each search directory:
+
+```sh
+uinxc app.ux -enable-header -I include -o app
+```
+
+Headers use canonical include-once semantics, so include guards are not needed.
 
 ## `uinx new`
 

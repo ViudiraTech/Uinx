@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# Uinx os::file
+# File descriptor primitives. The raw open/read/write/close operations are the
+# only place in the library that names hosted runtime hooks; the rest of the
+# layer works purely in terms of the fd-returning surface.
+dontneed std
+
+unsafe extern "C" func uinx_file_open(path: ptr u8, flags: i32, mode: i32) -> i64
+unsafe extern "C" func uinx_file_read(fd: i64, buf: mutptr u8, len: u64) -> i64
+unsafe extern "C" func uinx_file_write(fd: i64, buf: ptr u8, len: u64) -> i64
+extern "C" func uinx_file_close(fd: i64) -> i32
+
+# Standard descriptors.
+public const STDIN_FD: i64 = 0
+public const STDOUT_FD: i64 = 1
+public const STDERR_FD: i64 = 2
+
+public func close(fd: i64) -> i32:
+    return uinx_file_close(fd)
+
+public unsafe func read(fd: i64, buffer: mutptr u8, len: u64) -> i64:
+    return uinx_file_read(fd, buffer, len)
+
+public unsafe func write(fd: i64, buffer: ptr u8, len: u64) -> i64:
+    return uinx_file_write(fd, buffer, len)
+
+public unsafe func open(path: ptr u8, flags: i32, mode: i32) -> i64:
+    return uinx_file_open(path, flags, mode)

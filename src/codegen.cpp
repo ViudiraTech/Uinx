@@ -206,6 +206,20 @@ std::string cmpxchg_failure_order(std::string order) {
     return order;
 }
 
+// Number of arguments encoded in a uinx_syscallN intrinsic name, or
+// std::nullopt when the symbol is an ordinary runtime call.
+std::optional<int> syscall_arity_from_name(std::string_view name) {
+    static constexpr std::string_view prefix = "uinx_syscall";
+    if (!name.starts_with(prefix))
+        return std::nullopt;
+    const std::string_view suffix = name.substr(prefix.size());
+    if (suffix.empty() || suffix.size() > 1)
+        return std::nullopt;
+    if (suffix.front() < '0' || suffix.front() > '6')
+        return std::nullopt;
+    return suffix.front() - '0';
+}
+
 std::string compare_predicate(const Type& type, std::string_view op) {
     if (type.is_float()) {
         if (op == "==")
@@ -510,6 +524,130 @@ void LLVMCodegen::emit_inline_asm(std::ostream& os,
         value_types[output->out_slot] = output->type;
     }
     ++counter;
+}
+
+// Lowers the compiler-recognized `uinx_syscall0..6` ABI family into a raw
+// kernel trap for the current target. Argument 0 is the syscall number, the
+// remaining arguments map to the architecture's syscall argument registers.
+// Returns false when the target has no known trap sequence so the caller can
+// fall back to an ordinary call.
+bool LLVMCodegen::emit_syscall(std::ostream& os,
+                               const mir::Instruction& in,
+                               std::unordered_map<std::string, std::string>& values,
+                               std::unordered_map<std::string, Type>& value_types,
+                               std::size_t& counter) const {
+    const int arity = in.args.size();
+    if (arity < 1 || arity > 7)
+        return false;
+
+    auto value_of = [&](const std::string& value) -> std::string {
+        const auto it = values.find(value);
+        return it == values.end() ? value : it->second;
+    };
+
+    // Zero-extend each argument into an i64 so register constraints are
+    // satisfied regardless of the source integer width.
+    std::vector<std::string> args;
+    args.reserve(static_cast<std::size_t>(arity));
+    for (const auto& arg : in.args) {
+        const std::string raw = value_of(arg);
+        const auto type_it = value_types.find(arg);
+        const Type type = type_it == value_types.end() ? Type::builtin("i64") : type_it->second;
+        if (type.str() == "i64" || type.str() == "u64" || type.str() == "usize" ||
+            type.str() == "isize") {
+            args.push_back(raw);
+        } else {
+            args.push_back("%syscall.arg." + std::to_string(counter) + "." +
+                           std::to_string(args.size()));
+            os << "  " << args.back() << " = zext " << llvm_type(type) << ' ' << raw
+               << " to i64\n";
+        }
+    }
+
+    std::string constraint_text;
+    std::string asm_text;
+    if (target_.arch == "x86_64") {
+        // rax = number, rdi/rsi/rdx/r10/r8/r9 = args 1..6. Only the registers
+        // actually consumed are declared; the kernel additionally clobbers rcx
+        // (return RIP) and r11 (RFLAGS).
+        static const char* regs[7] = {"rax", "rdi", "rsi", "rdx", "r10", "r8", "r9"};
+        std::vector<std::string> constraints{"={rax}"};
+        for (int i = 0; i < arity; ++i)
+            constraints.push_back(std::string("{") + regs[i] + "}");
+        constraints.push_back("~{rcx}");
+        constraints.push_back("~{r11}");
+        constraints.push_back("~{memory}");
+        constraints.push_back("~{cc}");
+        for (std::size_t i = 0; i < constraints.size(); ++i) {
+            if (i)
+                constraint_text += ',';
+            constraint_text += constraints[i];
+        }
+        asm_text = "syscall";
+    } else if (target_.arch == "aarch64") {
+        // x8 = number, x0..x5 = args 1..6. The kernel may clobber x16/x17.
+        static const char* regs[7] = {"x8", "x0", "x1", "x2", "x3", "x4", "x5"};
+        std::vector<std::string> constraints{"={x0}"};
+        for (int i = 0; i < arity; ++i)
+            constraints.push_back(std::string("{") + regs[i] + "}");
+        constraints.push_back("~{x16}");
+        constraints.push_back("~{x17}");
+        constraints.push_back("~{memory}");
+        constraints.push_back("~{cc}");
+        for (std::size_t i = 0; i < constraints.size(); ++i) {
+            if (i)
+                constraint_text += ',';
+            constraint_text += constraints[i];
+        }
+        asm_text = "svc #0";
+    } else if (target_.arch == "riscv64") {
+        // a7 = number, a0..a5 = args 1..6. The kernel may clobber a6.
+        static const char* regs[7] = {"a7", "a0", "a1", "a2", "a3", "a4", "a5"};
+        std::vector<std::string> constraints{"={a0}"};
+        for (int i = 0; i < arity; ++i)
+            constraints.push_back(std::string("{") + regs[i] + "}");
+        constraints.push_back("~{a6}");
+        constraints.push_back("~{memory}");
+        constraints.push_back("~{cc}");
+        for (std::size_t i = 0; i < constraints.size(); ++i) {
+            if (i)
+                constraint_text += ',';
+            constraint_text += constraints[i];
+        }
+        asm_text = "ecall";
+    } else {
+        diags_.error(in.range,
+                     "E0601",
+                     "no syscall trap sequence is defined for target architecture '" +
+                         target_.arch + "'");
+        return false;
+    }
+
+    const std::string call_result = "%syscall.result." + std::to_string(counter);
+    os << "  " << call_result << " = call i64 asm sideeffect \"" << asm_text << "\", \""
+       << constraint_text << "\"(";
+    for (std::size_t i = 0; i < args.size(); ++i) {
+        if (i)
+            os << ", ";
+        os << "i64 " << args[i];
+    }
+    os << ")\n";
+
+    if (!in.result.empty()) {
+        // The trap returns i64; narrow to the declared result type when needed.
+        const std::string result_type = llvm_type(in.type);
+        if (result_type == "i64") {
+            values[in.result] = call_result;
+        } else {
+            const std::string truncated = "%syscall.trunc." + std::to_string(counter);
+            os << "  " << truncated << " = trunc i64 " << call_result << " to " << result_type
+               << "\n";
+            values[in.result] = truncated;
+        }
+        value_types[in.result] = in.type;
+    }
+    ++counter;
+    return true;
 }
 
 void LLVMCodegen::emit_async_function(
@@ -839,6 +977,20 @@ void LLVMCodegen::emit_async_function(
                     break;
                 }
                 case mir::Op::Call: {
+                    if (auto arity = syscall_arity_from_name(instruction.text);
+                        arity && instruction.args.size() == static_cast<std::size_t>(*arity) + 1) {
+                        std::unordered_map<std::string, std::string> syscall_values;
+                        for (const auto& arg : instruction.args)
+                            syscall_values[arg] = value_of(arg);
+                        if (emit_syscall(os, instruction, syscall_values, value_types, temp_counter)) {
+                            if (!instruction.result.empty()) {
+                                const auto it = syscall_values.find(instruction.result);
+                                if (it != syscall_values.end())
+                                    store_result(instruction, it->second);
+                            }
+                            break;
+                        }
+                    }
                     const auto fit = functions.find(instruction.text);
                     std::vector<Type> parameter_types;
                     if (fit != functions.end())
@@ -891,6 +1043,8 @@ void LLVMCodegen::emit_async_function(
                                      ? (unsigned_integer(from.kind) ? "zext" : "sext")
                                  : from_bits > to_bits ? "trunc"
                                                        : "bitcast";
+                    } else if (from.kind == TypeKind::Bool && instruction.type.is_integer()) {
+                        opcode = "zext";
                     } else if (from.is_integer() && instruction.type.is_float())
                         opcode = unsigned_integer(from.kind) ? "uitofp" : "sitofp";
                     else if (from.is_float() && instruction.type.is_integer())
@@ -1264,6 +1418,11 @@ void LLVMCodegen::emit_function(
                     value_types[instruction.result] = Type::builtin("bool");
                     break;
                 case mir::Op::Call: {
+                    if (auto arity = syscall_arity_from_name(instruction.text);
+                        arity && instruction.args.size() == static_cast<std::size_t>(*arity) + 1) {
+                        if (emit_syscall(os, instruction, values, value_types, asm_counter))
+                            break;
+                    }
                     const auto fit = functions.find(instruction.text);
                     std::vector<Type> params;
                     if (fit != functions.end())
@@ -1403,6 +1562,8 @@ void LLVMCodegen::emit_function(
                                      ? (unsigned_integer(from.kind) ? "zext" : "sext")
                                  : from_bits > to_bits ? "trunc"
                                                        : "bitcast";
+                    } else if (from.kind == TypeKind::Bool && instruction.type.is_integer()) {
+                        opcode = "zext";
                     } else if (from.is_integer() && instruction.type.is_float())
                         opcode = unsigned_integer(from.kind) ? "uitofp" : "sitofp";
                     else if (from.is_float() && instruction.type.is_integer())

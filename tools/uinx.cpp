@@ -106,7 +106,9 @@ SourceSelection source_selection(const std::filesystem::path& root, const Manife
 
         if (name == "std")
             selection.std_mode = disabled ? "none" : "full";
-        else if (!disabled && (name == "core" || name == "alloc" || name == "minimal"))
+        else if (!disabled &&
+                 (name == "core" || name == "alloc" || name == "sys" || name == "os" ||
+                  name == "fmt" || name == "minimal"))
             selection.std_mode = name;
         else if (name == "runtime")
             selection.runtime = !disabled;
@@ -250,6 +252,15 @@ void append_stdlib_sources(std::vector<std::filesystem::path>& out, std::string_
         return;
     append_layer("alloc");
     if (mode == "alloc")
+        return;
+    append_layer("sys");
+    if (mode == "sys")
+        return;
+    append_layer("os");
+    if (mode == "os")
+        return;
+    append_layer("fmt");
+    if (mode == "fmt")
         return;
     append_layer("minimal");
     if (mode == "minimal")

@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# Uinx fmt::parse
+# String-to-number conversion primitives.
+dontneed std
+
+unsafe extern "C" func uinx_parse_i64_cstr(value: ptr u8) -> i64
+unsafe extern "C" func uinx_parse_f64_cstr(value: ptr u8) -> f64
+unsafe extern "C" func uinx_cstr_len(value: ptr u8) -> usize

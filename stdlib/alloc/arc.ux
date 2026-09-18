@@ -7,6 +7,9 @@
 public struct Arc[T]:
     control: mutptr u8
 
+unsafe send Arc[T] where T: Send + Sync
+unsafe sync Arc[T] where T: Send + Sync
+
 unsafe extern "C" func uinx_arc_new_copy(value: ptr u8, size: usize, align: usize) -> mutptr u8
 unsafe extern "C" func uinx_arc_clone(arc: mutptr u8) -> mutptr u8
 unsafe extern "C" func uinx_arc_data(arc: mutptr u8) -> mutptr u8

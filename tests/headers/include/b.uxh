@@ -2,7 +2,7 @@
 # Copyright (c) 2026 ViudiraTech
 # By JiTianYu391
 
-# Uinx std::fs
+need "common.uxh"
 
-public struct File:
-    fd: i64
+def value_b() -> i32:
+    return twice(1)

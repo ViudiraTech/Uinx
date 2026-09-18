@@ -7,6 +7,7 @@
 - Extended canonical syntax with `const`, `static`, `for`, `loop`, `break`, `continue`, explicit `move`, `where` bounds, bitwise/shift operators and compound assignments.
 - OS-aware SMP model with `concurrent`, `shared`, `percpu`, `smp auto/manual/strict`, explicit `fence` and `compiler_fence`.
 - Call-graph concurrency propagation and automatic atomic promotion for compatible mutable global/field state.
+- Structural `Send`/`Sync` derivation, concurrent-parameter transfer checks, generic bound enforcement, and concise `unsafe send` / `unsafe sync` escape hatches for reviewed raw-pointer wrappers.
 - LLVM atomic load/store/RMW/fence lowering with acquire/release/acq_rel automatic ordering and seq_cst strict mode.
 - Freestanding `core::mem`, volatile pointer primitives, atomic primitives, and `SpinLock`.
 - Typed raw-pointer arithmetic and dereference assignment suitable for allocators, page tables and byte-memory code.
@@ -16,6 +17,7 @@
 - Native C++20 compiler and command-line tools build in Release mode.
 - Indentation-sensitive canonical syntax with migration compatibility for the 0.1 brace syntax.
 - `need` / `dontneed` source directives, including `dontneed std` and package-tool source/link selection.
+- Opt-in `.uxh` semantic headers with `-enable-header`, repeatable `-I` search paths, include-once canonical identity, automatic identical-declaration merging, and `def` function syntax.
 - Direct LLVM IR backend, object generation and separate link phase.
 - Static typing, local inference, generic functions/struct layouts, inline/`where` trait bounds, and concrete struct-bound checking for tested forms.
 - Trait implementation conformance and method calls, with compiler-enforced `Copy` eligibility that rejects mutable-reference fields and `Copy`/`Drop` conflicts.

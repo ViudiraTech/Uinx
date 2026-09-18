@@ -9,6 +9,9 @@ public struct String:
     len: usize
     cap: usize
 
+unsafe send String
+unsafe sync String
+
 unsafe extern "C" func uinx_utf8_validate(data: ptr u8, len: usize) -> i32
 
 public unsafe func string_bytes_are_utf8(data: ptr u8, len: usize) -> bool:

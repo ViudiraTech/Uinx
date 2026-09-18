@@ -2,9 +2,14 @@
 # Copyright (c) 2026 ViudiraTech
 # By JiTianYu391
 
-# Uinx minimal::thread
+# Uinx os::thread
+# Threading and scheduling primitives.
+dontneed std
 
 public struct Thread:
+    handle: usize
+
+public struct JoinHandle:
     handle: usize
 
 extern "C" func uinx_yield() -> unit

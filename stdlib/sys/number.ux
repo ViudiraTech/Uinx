@@ -1,0 +1,43 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# Uinx sys::number
+# Architecture-specific syscall numbers. Select the table with the compiler's
+# target arch at build time; each block is a plain declaration of constants.
+dontneed std
+
+# x86-64 Linux numbers (read/write/close/...)
+public const SYS_READ: i64 = 0
+public const SYS_WRITE: i64 = 1
+public const SYS_OPEN: i64 = 2
+public const SYS_CLOSE: i64 = 3
+public const SYS_STAT: i64 = 4
+public const SYS_FSTAT: i64 = 5
+public const SYS_LSEEK: i64 = 8
+public const SYS_MMAP: i64 = 9
+public const SYS_MUNMAP: i64 = 11
+public const SYS_BRK: i64 = 12
+public const SYS_RT_SIGACTION: i64 = 13
+public const SYS_RT_SIGPROCMASK: i64 = 14
+public const SYS_IOCTL: i64 = 16
+public const SYS_PIPE: i64 = 22
+public const SYS_YIELD: i64 = 24
+public const SYS_FORK: i64 = 57
+public const SYS_EXECVE: i64 = 59
+public const SYS_EXIT: i64 = 60
+public const SYS_WAIT4: i64 = 61
+public const SYS_KILL: i64 = 62
+public const SYS_CLONE: i64 = 56
+public const SYS_FUTEX: i64 = 202
+public const SYS_GETPID: i64 = 39
+public const SYS_GETTID: i64 = 186
+public const SYS_SOCKET: i64 = 41
+public const SYS_CONNECT: i64 = 42
+public const SYS_SENDTO: i64 = 44
+public const SYS_RECVFROM: i64 = 45
+public const SYS_BIND: i64 = 49
+public const SYS_LISTEN: i64 = 50
+public const SYS_ACCEPT: i64 = 43
+public const SYS_CLOCK_GETTIME: i64 = 228
+public const SYS_NANOSLEEP: i64 = 35

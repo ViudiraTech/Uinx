@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# EXPECT-DIAGNOSTIC: E0362
+dontneed std
+
+public concurrent func cpu_entry[T](value: T) -> unit:
+    return

@@ -34,7 +34,28 @@ A component cannot be both needed and disabled in the same module. `no_std;` is 
 
 The implemented SMP modes are `smp auto`, `smp manual`, and `smp strict`; see `MEMORY_MODEL.md`.
 
-## 3. Functions and modifiers
+## 3. Headers
+
+Reusable declarations use the `.uxh` extension and are imported with `need`.
+Header loading is disabled unless the compiler receives `-enable-header`;
+directories are searched with repeatable `-I` options.
+
+```uinx
+need "math.uxh"
+
+def add(left: i32, right: i32) -> i32
+```
+
+```sh
+uinxc main.ux -enable-header -I include
+```
+
+`def` is an alias for `func`. In a header, a `def` without a body is a
+declaration; a body provides one definition. Header identity is canonical and
+include-once, so include guards are not needed. Identical declarations merge
+automatically. Conflicting signatures and duplicate definitions are errors.
+
+## 4. Functions and modifiers
 
 ```uinx
 func add(a: i32, b: i32) -> i32:
@@ -51,7 +72,7 @@ extern "C" func abs(value: i32) -> i32
 
 Implemented declaration modifiers include `public`, `unsafe`, `async`, `concurrent`, and `extern "C"` where semantically valid. Extern declarations have no body.
 
-## 4. Local bindings and globals
+## 5. Local bindings and globals
 
 ```uinx
 val immutable = 42
@@ -66,7 +87,7 @@ percpu var local_ticks: u64 = 0
 
 `val` is immutable and `var` is mutable. `const` is a module constant. `static var/val` declares module storage. `shared` marks atomic-compatible shared storage. `percpu` marks CPU-local TLS storage.
 
-## 5. Structures and construction
+## 6. Structures and construction
 
 ```uinx
 struct Pair[T]:
@@ -82,7 +103,7 @@ val pair = new Pair[i32](left=20, right=22)
 
 Construction uses `new Type(field=value, ...)`.
 
-## 6. Traits and extensions
+## 7. Traits and extensions
 
 ```uinx
 trait Readable:
@@ -100,7 +121,7 @@ extend Cell with Readable:
 
 Use `pass` for an intentionally empty suite.
 
-## 7. Generics
+## 8. Generics
 
 ```uinx
 func identity[T: Copy](value: T) -> T:
@@ -117,7 +138,7 @@ val result = identity[i32](42)
 
 Generic declarations/applications use square brackets. Multiple bounds use `+`. Function and struct bounds may be written inline or in a trailing `where` clause. A `where` clause may only name generic parameters declared by that item. Struct bounds are checked when a concrete struct literal is instantiated.
 
-## 8. References, pointers, ownership
+## 9. References, pointers, ownership
 
 Types:
 
@@ -148,7 +169,7 @@ Non-`Copy` values move on by-value use; `move value` is the explicit spelling fo
 
 The borrow checker uses resolved HIR binding identity, backward control-flow liveness, and forward fixed-point ownership/loan state. It tracks struct-field places, conservatively aliases dynamic indexes, propagates reference provenance through aggregates/calls/method receivers, merges branch and loop states, rejects stack-reference escape, and fails compilation if its bounded dataflow analysis cannot converge. Shadowed source names therefore remain distinct ownership places.
 
-## 9. Control flow
+## 10. Control flow
 
 ```uinx
 if ready:
@@ -179,7 +200,7 @@ scope:
 
 Implemented statements include `if/elif/else`, `while`, integer-range `for`, `loop`, `break`, `continue`, `scope`, `return`, and `pass`.
 
-## 10. Expressions and operators
+## 11. Expressions and operators
 
 Implemented expression forms include literals, names, calls, method calls, member/index access, construction, borrow/deref, casts, `await`, and `asm`.
 
@@ -205,7 +226,7 @@ Casts use `as`:
 val address = raw as usize
 ```
 
-## 11. Concurrency declarations
+## 12. Concurrency declarations
 
 ```uinx
 shared var counter: u64 = 0
@@ -219,7 +240,14 @@ public unsafe concurrent func cpu_entry() -> unit:
 
 `concurrent` identifies a function that may execute concurrently; the property propagates through calls. `shared` is explicit shared atomic-compatible storage. `percpu` is local-exec TLS storage. Automatic promotion and ordering rules are specified in `MEMORY_MODEL.md`.
 
-## 12. Fences
+`concurrent` parameters are checked at the boundary. By-value and mutable-reference
+parameters must be `Send`; shared references must be `Send`, which requires their
+pointee to be `Sync`. `Send` and `Sync` are automatically derived from concrete
+fields and generic bounds. Raw pointers do not satisfy either trait unless a
+pointer-owning abstraction explicitly declares `unsafe send Type` or
+`unsafe sync Type` with the necessary bounds.
+
+## 13. Fences
 
 ```uinx
 fence acquire
@@ -235,11 +263,11 @@ compiler_fence seq_cst
 
 These lower through MIR/LLVM rather than architecture-specific source rewriting.
 
-## 13. Safe indexing
+## 14. Safe indexing
 
 Safe `Slice[T]`/`SliceMut[T]` indexing emits bounds checks before pointer arithmetic. Out-of-range execution enters an `llvm.trap` path in the verified implementation.
 
-## 14. RAII and Drop
+## 15. RAII and Drop
 
 Non-`Copy` values with a `Drop` implementation receive MIR destruction at normal scope exit for the tested forms.
 
@@ -251,7 +279,7 @@ extend Resource with Drop:
 
 Complete exception/unwind destruction and every nested generic specialization are not claimed as verified.
 
-## 15. Unsafe
+## 16. Unsafe
 
 ```uinx
 unsafe:
@@ -260,7 +288,7 @@ unsafe:
 
 An `unsafe func` body is also an unsafe context. Raw-pointer dereference/arithmetic and inline assembly require unsafe context. Safe code must cross this boundary explicitly.
 
-## 16. C FFI
+## 17. C FFI
 
 ```uinx
 extern "C" func abs(value: i32) -> i32
@@ -268,7 +296,7 @@ extern "C" func abs(value: i32) -> i32
 
 Scalar/reference/raw-pointer C-linkage paths are implemented. Full aggregate ABI equivalence across every ABI/architecture is not claimed.
 
-## 17. Inline assembly
+## 18. Inline assembly
 
 ```uinx
 unsafe:
@@ -277,7 +305,7 @@ unsafe:
 
 Implemented operands include `in`, `out`, `inout`, `clobber`, and `volatile`. The tested validation/codegen paths cover x86-64, AArch64, and RISC-V64.
 
-## 18. Async/await
+## 19. Async/await
 
 ```uinx
 async func answer() -> i32:
@@ -287,7 +315,7 @@ async func answer() -> i32:
 
 Hosted async lowering has future-frame suspend/resume machinery. Allocator-free kernel async/executor integration is not part of the verified 0.3 bare-metal surface.
 
-## 19. Primitive types
+## 20. Primitive types
 
 Implemented primitive spellings include:
 
@@ -300,13 +328,13 @@ isize usize
 f32 f64
 ```
 
-## 20. Computational model
+## 21. Computational model
 
 Uinx has mutable state, conditionals, `while`/`loop`, recursion, integer operations, function calls, and dynamically managed memory layers. In the ordinary abstract-machine sense this is a general-purpose/Turing-complete computational model. As with every implementation on real hardware, concrete executions are bounded by finite memory and time.
 
 Self-hosting is a separate property: the current canonical compiler is still C++20. See `BOOTSTRAP.md` for the stage0/stage1/stage2 acceptance criteria.
 
-## 21. Compatibility syntax
+## 22. Compatibility syntax
 
 Older Rust/C-shaped aliases such as `fn`, `pub`, `let`, brace/semicolon suites, `&T`, `&mut T`, `*const T`, `*mut T`, angle-bracket generic applications, and `impl Trait for Type` may remain accepted for migration. They are not canonical Uinx 0.3 and should not appear in new examples or standard-library code.
 

@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# Uinx sys::syscall
+# Raw kernel trap layer. These are compiler-recognized intrinsics: the backend
+# lowers uinx_syscall0..6 directly into the target's trap sequence
+# (x86-64 `syscall`, aarch64 `svc #0`, riscv64 `ecall`) with the correct
+# argument registers. No C runtime is consulted for these calls.
+dontneed std
+
+unsafe extern "C" func uinx_syscall0(number: i64) -> i64
+unsafe extern "C" func uinx_syscall1(number: i64, a1: i64) -> i64
+unsafe extern "C" func uinx_syscall2(number: i64, a1: i64, a2: i64) -> i64
+unsafe extern "C" func uinx_syscall3(number: i64, a1: i64, a2: i64, a3: i64) -> i64
+unsafe extern "C" func uinx_syscall4(number: i64, a1: i64, a2: i64, a3: i64, a4: i64) -> i64
+unsafe extern "C" func uinx_syscall5(number: i64, a1: i64, a2: i64, a3: i64, a4: i64, a5: i64) -> i64
+unsafe extern "C" func uinx_syscall6(number: i64, a1: i64, a2: i64, a3: i64, a4: i64, a5: i64, a6: i64) -> i64
