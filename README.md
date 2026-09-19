@@ -122,7 +122,9 @@ reuse another binding's ownership state.
 The current checker includes:
 
 - non-`Copy` move tracking and partial move/reinitialization;
-- shared-vs-exclusive alias checks down to struct fields, with conservative index aliasing;
+- Rust-style precise place conflict (sibling fields disjoint, conservative index aliasing);
+- Polonius-style loan liveness (root + precise-place) with NLL expiry;
+- two-phase borrows for method receivers, function `borrow mut` args, and compound assignment (accepts `v.push(v.len())`, `x += x`);
 - reference provenance through bindings, aggregates, assignments, calls, method receivers, and returns;
 - branch joins plus loop/back-edge fixed-point analysis;
 - backward CFG-style liveness for non-lexical loan expiry;
@@ -241,14 +243,15 @@ public unsafe concurrent func secondary_cpu_entry() -> unit:
     return
 ```
 
-`concurrent` propagates through the call graph. In `smp auto`, compatible mutable
-shared state reached by concurrent paths can be strengthened to atomic accesses.
+`concurrent` propagates through the call graph. Only explicitly `shared`
+state and explicit atomic APIs lower to atomics — `smp auto` never promotes
+implicitly (Rust+C++20+LKMM explicit-shared model).
 Concurrent parameters must be safe to transfer: by-value and mutable-reference
 types need `Send`, while shared references need the pointee to be `Sync`.
 `Send`/`Sync` are derived structurally from fields and generic bounds. Raw pointers
 are not transferable by default; a reviewed pointer-owning wrapper can opt in with
-the concise `unsafe send Type` / `unsafe sync Type` marker. Non-atomic aggregate
-state reached concurrently is rejected instead of receiving fake atomicity.
+the concise `unsafe send Type` / `unsafe sync Type` marker. Concurrent access
+to non-shared mutable state is rejected (`E0363`) instead of receiving fake atomicity.
 For protocols that need explicit ordering:
 
 ```uinx
@@ -262,9 +265,9 @@ compiler_fence acquire
 Policies:
 
 ```text
-smp auto    infer shared scalar access; acquire/release/acq_rel defaults
-smp manual  only explicitly shared/atomic state is strengthened
-smp strict  inferred accesses use seq_cst
+smp auto    explicit shared uses acquire/release/acq_rel; no implicit promotion
+smp manual  same as auto for explicit state (no promotion)
+smp strict  explicit shared uses seq_cst (debugging/max ordering)
 ```
 
 Multi-field invariants are not magically made correct by independent atomics. Use
@@ -309,8 +312,8 @@ The shipped low-level layers include implemented paths for:
 
 - `core::mem` byte copy/move/fill primitives;
 - `core::ptr` volatile MMIO helpers;
-- `core::atomic` compiler-lowered atomics;
-- `core::sync` spin locking;
+- `core::atomic` full-width compiler-lowered atomics (`AtomicU8/U16/U32/U64/Bool`);
+- `core::sync` freestanding locks (`SpinLock/TicketSpinLock/RwSpinLock/SeqLock/Once/Barrier`);
 - typed raw-pointer arithmetic and dereference assignment;
 - `alloc`, minimal hosted facilities, and the fuller `std` layer where selected.
 

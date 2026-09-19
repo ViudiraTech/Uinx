@@ -1,10 +1,22 @@
-# Uinx Memory and SMP Model
+# Uinx Memory and SMP Model — Rust + C++20 + LKMM fusion, explicit-shared
 
-Uinx combines ownership/borrowing with an explicit weak-memory model for systems software. The compiler can strengthen accesses that it can prove are shared by concurrent execution, while keeping MMIO, per-CPU storage, and protocol-level synchronization explicit.
+Uinx combines ownership/borrowing with an explicit weak-memory model for
+systems software. There is no implicit atomic promotion: only explicitly
+`shared` state and explicit atomic APIs lower to LLVM atomics. MMIO, per-CPU
+storage, and protocol-level synchronization stay explicit.
+
+Data-race definition (Rust + C++20): in safe code a data race is undefined
+behavior. A data race is conflicting non-synchronized accesses where at least
+one is non-atomic; conflicting means overlapping memory with at least one
+write; non-synchronized means neither happens-before the other. Mixed-size
+overlapping atomic accesses follow the C++ limitation and are rejected.
 
 ## Ownership and aliasing
 
-Safe references are `ref T` and `mutref T`. Raw pointers are `ptr T` and `mutptr T` and require an `unsafe` boundary for dereference or arithmetic. Non-`Copy` values move by value, mutable references are affine, and the borrow checker tracks places down to structure fields.
+Safe references are `ref T` and `mutref T`. Raw pointers are `ptr T` and
+`mutptr T` and require an `unsafe` boundary for dereference or arithmetic.
+Non-`Copy` values move by value, mutable references are affine, and the
+borrow checker tracks places down to structure fields.
 
 ```uinx
 val shared = borrow value
@@ -13,33 +25,42 @@ unsafe:
     deref raw = 42
 ```
 
-### Borrow-checking invariants
+### Borrow-checking invariants (Polonius-alpha + NLL + two-phase)
 
-The safe-reference checker treats ownership as a control-flow dataflow problem rather than a lexical-block counter. Local and parameter places use HIR `SymbolId` identity, so two bindings with the same spelling in nested scopes cannot share move or loan state accidentally.
+The safe-reference checker is flow-sensitive over HIR `SymbolId` identity with
+backward liveness and Polonius-style loan liveness (loan live only if its
+borrower may be used later via root or precise-place liveness plus subset
+edges). Place conflict is Rust-style: sibling fields disjoint, `[*]`
+conservative, parent/child overlap, `<external:>` conservative.
 
-For the currently implemented language forms, the checker enforces these invariants before MIR/code generation:
+For the currently implemented language forms, the checker enforces before
+MIR/code generation:
 
-- a non-`Copy` place cannot be used after move until that place is fully reinitialized;
+- a non-`Copy` place cannot be used after move until fully reinitialized;
 - a moved parent cannot be resurrected by initializing only one child field;
-- an active `mutref` excludes overlapping reads, writes, moves, and other borrows;
-- an active shared `ref` excludes overlapping writes/moves and mutable borrows but permits reads/shared aliases;
-- sibling struct fields are independent places, while dynamic indexes conservatively alias;
-- reference provenance follows bindings, struct fields, assignments, calls, method receivers, and returned aggregates;
-- a safe reference into stack-owned storage cannot escape the storage scope or function;
-- branch joins and loop back-edges merge ownership/loan state to a fixed point;
-- loan expiry uses backward liveness rather than source-block end alone;
-- safe stack-borrowed references that would remain live across `await` are conservatively rejected;
-- dataflow non-convergence is a compile error (`E0408`) rather than permission to continue with an under-approximated state.
+- an active `mutref` excludes overlapping reads, writes, moves, and borrows;
+- an active shared `ref` excludes overlapping writes/moves and mutable borrows;
+- sibling struct fields are independent places, dynamic indexes alias;
+- two-phase borrows: `receiver.mut_method(args)` reserves receiver as
+  shared-like, inspects args, then activates to exclusive. This accepts
+  `v.push(v.len())`. Function `borrow mut` args and `x += x` compound
+  assignment use the same reservation/activation protocol;
+- reference provenance through bindings, aggregates, calls, method receivers;
+- stack references cannot escape scope/function (`E0404/E0405`);
+- branch/loop fixed-point merging; NLL-style loan expiry via backward
+  root + precise-place liveness; `await` stack-borrow rejection (`E0407`);
+- fail-closed `E0408` on non-convergence.
 
-`unsafe` permits operations whose correctness cannot be established by these rules, especially raw-pointer dereference/arithmetic and assembly. It does not turn safe references into unchecked aliases.
+`unsafe` permits raw-pointer/assembly/FFI invariants. It never turns safe
+references into unchecked aliases.
 
 ### `Copy` is not a user assertion
 
-An explicit `Copy` implementation is accepted only when every concrete field is itself copyable. Exclusive mutable references are not `Copy`, and a concrete type cannot simultaneously rely on `Drop` and be treated as `Copy`. This prevents a trait declaration from manufacturing a second safe `mutref`.
+An explicit `Copy` is accepted only when every concrete field is copyable.
+`mutref` fields are never `Copy`; `Copy` + `Drop` on the same concrete type
+is rejected.
 
 ## Declaring concurrency
-
-A function that can execute concurrently on multiple CPUs/threads is declared with `concurrent`:
 
 ```uinx
 public unsafe concurrent func secondary_cpu_entry() -> unit:
@@ -47,42 +68,27 @@ public unsafe concurrent func secondary_cpu_entry() -> unit:
     return
 ```
 
-Concurrency is propagated through the call graph. If a `concurrent` entry calls `scheduler_tick()`, helpers reachable from that entry are analyzed as concurrent too. It is not necessary to annotate every helper manually.
-
-Every parameter of a `concurrent` function is checked as a transfer boundary.
-By-value and mutable-reference parameters must satisfy `Send`; shared references
-must satisfy `Send`, which means their pointee must satisfy `Sync`. This prevents
-an unsynchronized pointer-owning type from being moved into a concurrent path
-without a reviewed abstraction.
+Concurrency propagates through the visible call graph. Every `concurrent`
+parameter is a transfer boundary: by-value/`mutref` must be `Send`;
+`ref T` must be `Send` (i.e. `T: Sync`). Raw pointers satisfy neither
+without a reviewed `unsafe send/sync` wrapper. `extern` declarations are
+exempt: they are FFI trust boundaries without bodies, and the `unsafe` block
+at the Uinx call site is the audit point — this keeps raw-pointer-based
+`uinx_atomic_*` intrinsics usable from exactly the concurrent paths they
+exist for, while Uinx-level callers stay checked.
 
 ### Automatic `Send` and `Sync`
 
-`Send` means a value can move to another thread/CPU; `Sync` means a shared
-reference to it can be used concurrently. Uinx derives both structurally for
-compiler-visible types:
-
-- scalar and immutable shared-reference rules follow the usual Rust model;
-- `ref T: Send` requires `T: Sync`;
-- `mutref T: Send` requires `T: Send`;
-- named types require every concrete field to satisfy the requested trait;
-- generic fields use their declared bounds;
-- raw pointers satisfy neither trait by default.
-
-An owning abstraction that must encapsulate a raw pointer can make a small,
-reviewed assertion:
+- `ref T: Send` requires `T: Sync`; `mutref T: Send` requires `T: Send`;
+- named types require all concrete fields; generics use declared bounds;
+- raw pointers satisfy neither by default.
 
 ```uinx
 unsafe send Box[T] where T: Send
 unsafe sync Box[T] where T: Send + Sync
 ```
 
-The syntax is intentionally minimal. `unsafe send Type` asserts unconditional
-`Send`; `unsafe sync Type` asserts unconditional `Sync`; an optional
-indentation-free `where` clause supplies conditional generic bounds.
-
-## Shared state
-
-Explicit shared state uses `shared`:
+## Shared state (explicit-only)
 
 ```uinx
 shared var online_cpus: u64 = 0
@@ -92,67 +98,62 @@ struct RunQueue:
     local_hint: u64
 ```
 
-Atomic-compatible scalar `shared` globals and fields are lowered to LLVM atomic operations. Uinx currently treats integer, boolean, and raw-pointer scalar storage as atomically compatible.
-
-In `smp auto` and `smp strict`, mutable scalar globals reached from a concurrent call path are also promoted to shared storage by semantic analysis. Atomic-compatible fields of mutable global structures can be promoted field-by-field. Once promoted, every compiler-visible access to that global/field is atomic, including accesses from a non-`concurrent` observer.
-
-The compiler does **not** pretend that making individual fields atomic makes an arbitrary multi-field invariant safe. If a concurrent path touches aggregate state that cannot be safely strengthened as one atomic object, compilation fails with `E0363`; use explicit shared fields, a lock, per-CPU storage, or another protocol.
+Only explicitly `shared` integer/raw-pointer globals/fields lower to
+LLVM atomics (`bool` uses byte-sized `AtomicBool` over `u8` because LLVM `i1`
+atomics are invalid). `smp auto/manual/strict` never promotes implicitly. Any
+concurrent access to a mutable non-`shared` non-`percpu` global/field is
+`E0363`: mark it `shared`, use a lock, or use `percpu`. Multi-field
+invariants are never magically safe via independent atomics.
 
 ## SMP policy
-
-The module policy is selected with one directive:
 
 ```uinx
 smp auto
 ```
 
-Three modes are implemented:
-
 | Mode | Meaning |
 |---|---|
-| `smp auto` | Default. Infer shared scalar state reachable from concurrent paths and use acquire/release-style ordering. |
-| `smp manual` | Disable implicit strengthening. Only explicitly `shared` data and explicit atomic APIs are atomic. |
-| `smp strict` | Keep automatic shared-state discovery but use sequentially consistent ordering for generated atomics. |
+| `smp auto` | Explicit `shared` uses acquire/release/acq_rel. No implicit promotion. |
+| `smp manual` | Same as auto for explicit state (no promotion). |
+| `smp strict` | Explicit `shared` uses seq_cst (debugging/max ordering). |
 
-The package tools also accept `--smp=auto`, `--smp=manual`, and `--smp=strict` as an override.
+`--smp=auto|manual|strict` overrides. Ordering for explicit lowering:
 
-### Ordering in automatic mode
+- loads: acquire (strict: seq_cst);
+- stores: release (strict: seq_cst);
+- RMW (`+=,-=,&=,|=,^=` → `atomicrmw`): acq_rel (strict: seq_cst).
 
-For compiler-generated operations in `smp auto`:
-
-- atomic loads use **acquire**;
-- atomic stores use **release**;
-- supported read-modify-write operations use **acq_rel**.
-
-`+=`, `-=`, `&=`, `|=`, and `^=` on atomic places lower to LLVM `atomicrmw`. Operations that require a protocol Uinx cannot synthesize safely are rejected instead of being silently weakened; use `AtomicU64.compare_exchange()` or a lock.
-
-`smp strict` emits `seq_cst` for automatically generated atomic accesses. This is a debugging/maximum-ordering option, not the recommended default for performance-sensitive kernels.
+Unsupported compound ops are rejected (`E0509`); use `compare_exchange` or a
+lock. LKMM roach-motel lock ordering applies: acquire on lock, release on
+unlock; observers without the lock need explicit fences.
 
 ## Explicit fences
-
-Hardware-visible fences are written directly:
 
 ```uinx
 fence acquire
 fence release
 fence acq_rel
 fence seq_cst
-```
 
-Compiler-local ordering barriers are:
-
-```uinx
 compiler_fence acquire
 compiler_fence release
 compiler_fence acq_rel
 compiler_fence seq_cst
 ```
 
-These are lowered at MIR/LLVM level. The backend is responsible for selecting the appropriate target instruction sequence; Uinx does not hard-code x86 barriers into architecture-independent source.
+Lowered at MIR/LLVM level (`fence` vs `fence syncscope("singlethread")`).
+C++20 validation: loads never release/acq_rel; stores never acquire/acq_rel;
+`cmpxchg` failure never release/acq_rel and never exceeds success ordering
+(downgraded per LLVM rules).
 
-## Atomic library
+## Atomic library (full family)
 
-`core::atomic` provides freestanding compiler-lowered atomics. The current concrete primitive is `AtomicU64`:
+`core::atomic` provides `AtomicU8/U16/U32/U64/Usize/Bool` with
+`load(_relaxed/_acquire)`, `store(_relaxed/_release)`, `swap`,
+`fetch_add/sub/and/or/xor(_relaxed)`, `compare_exchange(_weak)`.
+`uinx_atomic_*` with constant ordering lowers directly to LLVM
+`load atomic/store atomic/atomicrmw/cmpxchg`; hosted builds fall back to
+C11 `stdatomic` in `runtime/sync.c`.
 
 ```uinx
 var counter = new AtomicU64(value=0)
@@ -160,39 +161,32 @@ counter.fetch_add(1)
 val value = counter.load()
 ```
 
-Its operations include relaxed load/store, acquire load, release store, acq_rel fetch-add, and compare-exchange. Compiler-recognized `uinx_atomic_*` calls lower directly to LLVM atomic instructions, so a bare-metal target does not require the hosted runtime for these paths.
+## Synchronization
 
-## Spin locks
-
-`core::sync` provides a small freestanding `SpinLock` built on `AtomicU64`:
+`core::sync` freestanding: `SpinLock` (with backoff), fair `TicketSpinLock`,
+`RwSpinLock` (concurrent readers), `SeqLock` (lock-free readers via retry),
+`Once`, `Barrier`. No interrupt/preemption/lockdep/NUMA policy is guessed.
 
 ```uinx
 var lock = new SpinLock(state=new AtomicU64(value=0))
-
 lock.lock()
 # protected state
 lock.unlock()
 ```
 
-The lock is suitable as a primitive synchronization building block. It intentionally does not guess higher-level scheduling policy, interrupt state, lock ranking, preemption rules, or NUMA placement; kernels should layer those policies explicitly.
-
 ## Per-CPU state
-
-State that belongs to one CPU is declared with `percpu`:
 
 ```uinx
 percpu var local_ticks: u64 = 0
 ```
 
-`percpu` lowers to local-exec LLVM TLS storage and is deliberately excluded from automatic atomic strengthening. This avoids turning CPU-private counters into contended cache-line atomics.
-
-A bare-metal kernel **must initialize the architecture TLS/thread-pointer base for each CPU before accessing `percpu` variables**. The generated starter kernel does not invent a boot protocol or per-CPU allocator, so it does not access `percpu` storage before the kernel installs that state.
-
-Remote writes into another CPU's per-CPU area are not treated as ordinary safe local accesses and need an explicit kernel protocol.
+Lowers to local-exec TLS, never atomic. Kernels must install TLS/TP per CPU
+before access. Remote writes need an explicit protocol.
 
 ## MMIO and volatile access
 
-Device registers are not ordinary shared RAM. Uinx does not automatically convert MMIO to atomics. Use `core::ptr` volatile operations inside `unsafe` code:
+Device registers are never atomics. Use `core::ptr` volatile ops in `unsafe`
+plus explicit fences/`asm()` per device/arch spec.
 
 ```uinx
 public unsafe func device_write(reg: mutptr u32, value: u32) -> unit:
@@ -200,14 +194,18 @@ public unsafe func device_write(reg: mutptr u32, value: u32) -> unit:
     return
 ```
 
-Use explicit fences or architecture-specific `asm()` where the device/architecture specification requires ordering beyond volatile access.
-
 ## What the compiler can and cannot infer
 
-Automatic SMP strengthening is intentionally bounded by what the compiler can prove from Uinx-visible code. It can discover concurrent call paths and compiler-visible scalar globals/fields. It cannot infer synchronization hidden behind arbitrary FFI, inline assembly, DMA engines, interrupt controllers, lock-free multi-word protocols, or external agents.
-
-`unsafe` remains the boundary where the kernel author takes responsibility for those facts.
+The compiler discovers concurrent call paths and checks explicit `shared`.
+It cannot infer synchronization hidden behind FFI, inline assembly, DMA,
+interrupt controllers, multi-word lock-free protocols, or external agents.
+`unsafe` is where the kernel author takes responsibility.
 
 ## Verification status
 
-The release tests verify IR-level atomic lowering, automatic call-graph propagation, automatic shared promotion, manual/strict policy behavior, TLS lowering for `percpu`, explicit fences, concurrent-boundary `Send` checks, structural `Send`/`Sync` derivation, and cross-target object generation. The memory model is not a machine-checked proof of race freedom for all possible unsafe/FFI/kernel code.
+Tests verify explicit-shared IR lowering, call-graph propagation, E0363
+rejection of implicit access, strict seq_cst, TLS `percpu`, fences, `Send`
+checks, structural `Send`/`Sync`, full-width atomic lowering with C++20
+ordering validation, two-phase borrow acceptance (`v.push(v.len())`-shape),
+and cross-target objects. Not a machine-checked proof for all
+unsafe/FFI/kernel code.

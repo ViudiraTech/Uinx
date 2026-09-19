@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# TEST: conformance.positive.compound-two-phase
+# EXPECT: compile-pass
+
+func main() -> i32:
+    var x = 20
+    x += x
+    return x - 40

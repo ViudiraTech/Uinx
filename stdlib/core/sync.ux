@@ -2,8 +2,9 @@
 # Copyright (c) 2026 ViudiraTech
 # By JiTianYu391
 
-# Uinx core::sync
-# Minimal freestanding synchronization built on compiler-lowered atomics.
+# Uinx core::sync — freestanding synchronization (LKMM roach-motel ordering)
+# All locks are built on compiler-lowered atomics; no hosted runtime needed.
+# Policy (interrupt/preemption/lockdep/NUMA) stays explicit in the kernel.
 dontneed std
 
 public struct SpinLock:
@@ -15,10 +16,14 @@ extend SpinLock:
         return self.state.compare_exchange(borrow mut expected, 1)
 
     public func lock(self: mutref Self) -> unit:
+        var spins: u64 = 0
         loop:
             if self.try_lock():
                 return
             compiler_fence acquire
+            spins += 1
+            if spins >= 100:
+                spins = 0
 
     public func unlock(self: mutref Self) -> unit:
         self.state.store(0)
@@ -26,3 +31,146 @@ extend SpinLock:
 
     public func is_locked(self: ref Self) -> bool:
         return self.state.load_relaxed() != 0
+
+# Fair FIFO ticket lock: prevents starvation under contention.
+public struct TicketSpinLock:
+    next: AtomicU64
+    serving: AtomicU64
+
+extend TicketSpinLock:
+    public func lock(self: mutref Self) -> unit:
+        val ticket = self.next.fetch_add(1)
+        loop:
+            val cur = self.serving.load()
+            if cur == ticket:
+                return
+            compiler_fence acquire
+        return
+
+    public func try_lock(self: mutref Self) -> bool:
+        val cur = self.serving.load()
+        val nxt = self.next.load()
+        if cur != nxt:
+            return false
+        var expected: u64 = nxt
+        if self.next.compare_exchange(borrow mut expected, nxt + 1):
+            if expected != nxt:
+                return false
+            return true
+        return false
+
+    public func unlock(self: mutref Self) -> unit:
+        val cur = self.serving.load_relaxed()
+        self.serving.store(cur + 1)
+        return
+
+# Reader-writer spin lock: concurrent readers, exclusive writer.
+# Layout: low 30 bits = reader count, bit 31 = writer flag.
+public struct RwSpinLock:
+    state: AtomicU32
+
+extend RwSpinLock:
+    public func try_read(self: mutref Self) -> bool:
+        val cur = self.state.load_relaxed()
+        if cur >= 2147483648:
+            return false
+        var expected: u32 = cur
+        return self.state.compare_exchange(borrow mut expected, cur + 1)
+
+    public func read_lock(self: mutref Self) -> unit:
+        loop:
+            if self.try_read():
+                return
+            compiler_fence acquire
+        return
+
+    public func read_unlock(self: mutref Self) -> unit:
+        val cur = self.state.load_relaxed()
+        self.state.store(cur - 1)
+        return
+
+    public func try_write(self: mutref Self) -> bool:
+        var expected: u32 = 0
+        return self.state.compare_exchange(borrow mut expected, 2147483648)
+
+    public func write_lock(self: mutref Self) -> unit:
+        loop:
+            if self.try_write():
+                return
+            compiler_fence acquire
+        return
+
+    public func write_unlock(self: mutref Self) -> unit:
+        self.state.store(0)
+        return
+
+# Sequence lock: lock-free readers retry on concurrent writer.
+public struct SeqLock:
+    seq: AtomicU64
+
+extend SeqLock:
+    public func write_begin(self: mutref Self) -> unit:
+        self.seq.fetch_add(1)
+        compiler_fence release
+        return
+
+    public func write_end(self: mutref Self) -> unit:
+        compiler_fence release
+        self.seq.fetch_add(1)
+        return
+
+    public func read_begin(self: ref Self) -> u64:
+        loop:
+            val s = self.seq.load()
+            if s % 2 == 0:
+                compiler_fence acquire
+                return s
+            compiler_fence acquire
+        return 0
+
+    public func read_retry(self: ref Self, stamp: u64) -> bool:
+        compiler_fence acquire
+        val cur = self.seq.load()
+        return cur != stamp
+
+# One-time initialization flag.
+public struct Once:
+    state: AtomicU8
+
+extend Once:
+    public func is_done(self: ref Self) -> bool:
+        return self.state.load() == 2
+
+    public func try_start(self: mutref Self) -> bool:
+        var expected: u8 = 0
+        return self.state.compare_exchange(borrow mut expected, 1)
+
+    public func mark_done(self: mutref Self) -> unit:
+        self.state.store(2)
+        return
+
+    public func reset(self: mutref Self) -> unit:
+        self.state.store_relaxed(0)
+        return
+
+# Centralized barrier for N CPUs/threads.
+public struct Barrier:
+    arrived: AtomicU64
+    generation: AtomicU64
+    total: u64
+
+extend Barrier:
+    public func wait(self: mutref Self) -> bool:
+        val gen = self.generation.load()
+        val n = self.arrived.fetch_add(1) + 1
+        if n >= self.total:
+            self.arrived.store_relaxed(0)
+            compiler_fence release
+            self.generation.fetch_add(1)
+            return true
+        loop:
+            val cur = self.generation.load()
+            if cur != gen:
+                return false
+            compiler_fence acquire
+        return false

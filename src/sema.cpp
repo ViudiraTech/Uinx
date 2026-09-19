@@ -483,12 +483,12 @@ void TypeChecker::collect_items(const ast::Module& module) {
                 info.fields[field.name] = ft;
                 if (field.is_shared) {
                     info.shared_fields.insert(field.name);
-                    if (!(ft.is_integer() || ft.kind == TypeKind::Bool ||
-                          ft.kind == TypeKind::RawPtr || ft.kind == TypeKind::Generic))
+                    if (!(ft.is_integer() || ft.kind == TypeKind::RawPtr ||
+                          ft.kind == TypeKind::Generic))
                         diags_.error(field.range,
                                      "E0358",
-                                     "shared fields require integer, bool, raw pointer, or "
-                                     "atomic-compatible generic type");
+                                     "shared fields require integer, raw pointer, or "
+                                     "atomic-compatible generic type (bool uses AtomicBool)");
                     if (ft.kind == TypeKind::Generic) {
                         const auto parameter = std::find_if(
                             s->generics.begin(),
@@ -511,11 +511,11 @@ void TypeChecker::collect_items(const ast::Module& module) {
             Type ty = type_from_ast(g->type);
             if (g->is_shared && g->is_percpu)
                 diags_.error(g->range, "E0351", "a global cannot be both shared and percpu");
-            if (g->is_shared &&
-                !(ty.is_integer() || ty.kind == TypeKind::Bool || ty.kind == TypeKind::RawPtr))
+            if (g->is_shared && !(ty.is_integer() || ty.kind == TypeKind::RawPtr))
                 diags_.error(g->range,
                              "E0352",
-                             "shared globals currently require integer, bool, or raw pointer type");
+                             "shared globals require integer or raw pointer type (bool uses "
+                             "AtomicBool)");
             model_.globals[g->name] = {
                 g->name, ty, g->is_mut, g->is_const, g->is_shared, g->is_percpu, g};
         } else if (auto t = std::get_if<ast::TraitDecl>(&item)) {
@@ -697,6 +697,15 @@ void TypeChecker::validate_concurrency_boundaries() {
     for (const auto& [key, signature] : model_.functions) {
         (void)key;
         if (!signature.is_concurrent || !signature.decl)
+            continue;
+        // `extern` declarations are FFI trust boundaries without bodies: the
+        // `unsafe` block at the Uinx call site is the audit point, and raw
+        // pointers are the ABI mechanism itself (e.g. `uinx_atomic_*`
+        // intrinsics lowered directly to LLVM atomics). Enforcing `Send` on
+        // their parameters would make compare-exchange/fetch-add unusable
+        // from exactly the concurrent paths they exist for, while checking
+        // nothing about an actual transfer. Uinx-level callers stay checked.
+        if (signature.is_extern)
             continue;
         for (std::size_t i = 0; i < signature.params.size(); ++i) {
             const Type& parameter = signature.params[i];
@@ -901,30 +910,49 @@ void TypeChecker::propagate_concurrency(ast::SmpMode mode) {
             work.push_back(callee);
     }
 
-    if (mode == ast::SmpMode::Manual)
-        return;
-
+    // All SMP modes are explicit-shared now: `auto`, `manual` and `strict`
+    // differ only in ordering of explicitly atomic accesses, never in
+    // promotion. See docs/MEMORY_MODEL.md.
+    (void)mode;
+    // Industrial-grade explicit-shared model (Rust + C++20 + LKMM fusion):
+    // `smp auto/manual/strict` no longer implicitly promotes mutable globals.
+    // Only explicitly `shared` globals/fields lower to LLVM atomics. Any
+    // concurrent access to a mutable non-shared, non-percpu global is E0363.
+    // Ordering: auto/manual => acquire/release/acq_rel for explicit atomics,
+    // strict => seq_cst. See docs/MEMORY_MODEL.md.
+    // Note: `shared bool` is rejected at definition (use AtomicBool over u8)
+    // because LLVM atomics must be byte-sized (i1 is not valid).
     const auto atomic_compatible = [](const Type& type) {
-        return type.is_integer() || type.kind == TypeKind::Bool || type.kind == TypeKind::RawPtr;
+        return type.is_integer() || type.kind == TypeKind::RawPtr;
     };
 
-    std::unordered_set<std::string> warned_aggregates;
-    std::function<void(const ast::Expr&)> mark_expr;
-    std::function<void(const ast::Stmt&)> mark_stmt;
-    mark_expr = [&](const ast::Expr& expr) {
+    std::unordered_set<std::string> reported;
+    std::function<void(const ast::Expr&)> check_expr;
+    std::function<void(const ast::Stmt&)> check_stmt;
+    check_expr = [&](const ast::Expr& expr) {
         if (expr.kind == ast::ExprKind::Name) {
             const auto& name = static_cast<const ast::NameExpr&>(expr).name;
             auto global = model_.globals.find(name);
             if (global != model_.globals.end() && global->second.is_mut &&
-                !global->second.is_percpu) {
-                if (atomic_compatible(global->second.type)) {
-                    global->second.is_shared = true;
-                } else if (warned_aggregates.insert(name).second) {
-                    diags_.error(expr.range,
-                                 "E0363",
-                                 "concurrent access to aggregate global '" + name +
-                                     "' cannot be strengthened as one atomic object; mark atomic "
-                                     "fields shared, use a lock, or use percpu storage");
+                !global->second.is_percpu && !global->second.is_shared) {
+                const std::string key = std::to_string(expr.range.begin.line) + ":" +
+                                        std::to_string(expr.range.begin.column) + ":" + name;
+                if (reported.insert(key).second) {
+                    if (atomic_compatible(global->second.type)) {
+                        diags_.error(expr.range,
+                                     "E0363",
+                                     "concurrent access to mutable global '" + name +
+                                         "' requires explicit `shared`, a lock, or `percpu` "
+                                         "storage; smp auto no longer promotes implicitly "
+                                         "(Rust+C++20+LKMM explicit-shared model)");
+                    } else {
+                        diags_.error(expr.range,
+                                     "E0363",
+                                     "concurrent access to aggregate global '" + name +
+                                         "' cannot be strengthened as one atomic object; mark "
+                                         "atomic fields shared, use a lock, or use percpu "
+                                         "storage");
+                    }
                 }
             }
             return;
@@ -939,100 +967,126 @@ void TypeChecker::propagate_concurrency(ast::SmpMode mode) {
                     auto structure = model_.structs.find(global->second.type.name);
                     if (structure != model_.structs.end()) {
                         auto field = structure->second.fields.find(member.member);
-                        if (field != structure->second.fields.end() &&
-                            atomic_compatible(field->second)) {
-                            structure->second.shared_fields.insert(member.member);
+                        if (field != structure->second.fields.end()) {
+                            if (structure->second.shared_fields.contains(member.member))
+                                return;
+                            const std::string key = std::to_string(expr.range.begin.line) + ":" +
+                                                    std::to_string(expr.range.begin.column) + ":" +
+                                                    base_name + "." + member.member;
+                            if (reported.insert(key).second) {
+                                diags_.error(
+                                    expr.range,
+                                    "E0363",
+                                    "concurrent access to field '" + base_name + "." +
+                                        member.member +
+                                        "' requires explicit `shared` field, a lock, or "
+                                        "`percpu` storage; smp auto no longer promotes implicitly");
+                            }
                             return;
                         }
                     }
+                    // Aggregate global itself accessed concurrently without per-field
+                    // sharing: reject.
+                    const std::string key = std::to_string(expr.range.begin.line) + ":" +
+                                            std::to_string(expr.range.begin.column) + ":" +
+                                            base_name;
+                    if (reported.insert(key).second) {
+                        diags_.error(expr.range,
+                                     "E0363",
+                                     "concurrent access to aggregate global '" + base_name +
+                                         "' cannot be strengthened as one atomic object; mark "
+                                         "atomic fields shared, use a lock, or use percpu "
+                                         "storage");
+                    }
+                    return;
                 }
             }
-            mark_expr(*member.base);
+            check_expr(*member.base);
             return;
         }
         switch (expr.kind) {
             case ast::ExprKind::Unary:
-                mark_expr(*static_cast<const ast::UnaryExpr&>(expr).operand);
+                check_expr(*static_cast<const ast::UnaryExpr&>(expr).operand);
                 break;
             case ast::ExprKind::Binary: {
                 const auto& binary = static_cast<const ast::BinaryExpr&>(expr);
-                mark_expr(*binary.lhs);
-                mark_expr(*binary.rhs);
+                check_expr(*binary.lhs);
+                check_expr(*binary.rhs);
                 break;
             }
             case ast::ExprKind::Borrow:
-                mark_expr(*static_cast<const ast::BorrowExpr&>(expr).target);
+                check_expr(*static_cast<const ast::BorrowExpr&>(expr).target);
                 break;
             case ast::ExprKind::Call: {
                 const auto& call = static_cast<const ast::CallExpr&>(expr);
                 if (call.callee->kind == ast::ExprKind::Member)
-                    mark_expr(*static_cast<const ast::MemberExpr&>(*call.callee).base);
+                    check_expr(*static_cast<const ast::MemberExpr&>(*call.callee).base);
                 for (const auto& arg : call.args)
-                    mark_expr(*arg);
+                    check_expr(*arg);
                 break;
             }
             case ast::ExprKind::Index: {
                 const auto& index = static_cast<const ast::IndexExpr&>(expr);
-                mark_expr(*index.base);
-                mark_expr(*index.index);
+                check_expr(*index.base);
+                check_expr(*index.index);
                 break;
             }
             case ast::ExprKind::Await:
-                mark_expr(*static_cast<const ast::AwaitExpr&>(expr).value);
+                check_expr(*static_cast<const ast::AwaitExpr&>(expr).value);
                 break;
             case ast::ExprKind::Cast:
-                mark_expr(*static_cast<const ast::CastExpr&>(expr).value);
+                check_expr(*static_cast<const ast::CastExpr&>(expr).value);
                 break;
             case ast::ExprKind::StructLiteral:
                 for (const auto& field : static_cast<const ast::StructLiteralExpr&>(expr).fields)
-                    mark_expr(*field.value);
+                    check_expr(*field.value);
                 break;
             case ast::ExprKind::Asm:
                 for (const auto& operand : static_cast<const ast::AsmExpr&>(expr).operands)
                     if (operand.value)
-                        mark_expr(*operand.value);
+                        check_expr(*operand.value);
                 break;
             default:
                 break;
         }
     };
-    mark_stmt = [&](const ast::Stmt& stmt) {
+    check_stmt = [&](const ast::Stmt& stmt) {
         if (const auto* let_stmt = dynamic_cast<const ast::LetStmt*>(&stmt)) {
             if (let_stmt->init)
-                mark_expr(*let_stmt->init);
+                check_expr(*let_stmt->init);
         } else if (const auto* assign_stmt = dynamic_cast<const ast::AssignStmt*>(&stmt)) {
-            mark_expr(*assign_stmt->target);
-            mark_expr(*assign_stmt->value);
+            check_expr(*assign_stmt->target);
+            check_expr(*assign_stmt->value);
         } else if (const auto* expr_stmt = dynamic_cast<const ast::ExprStmt*>(&stmt))
-            mark_expr(*expr_stmt->expr);
+            check_expr(*expr_stmt->expr);
         else if (const auto* return_stmt = dynamic_cast<const ast::ReturnStmt*>(&stmt)) {
             if (return_stmt->value)
-                mark_expr(*return_stmt->value);
+                check_expr(*return_stmt->value);
         } else if (const auto* if_stmt = dynamic_cast<const ast::IfStmt*>(&stmt)) {
-            mark_expr(*if_stmt->condition);
+            check_expr(*if_stmt->condition);
             for (const auto& child : if_stmt->then_block->stmts)
-                mark_stmt(*child);
+                check_stmt(*child);
             if (if_stmt->else_block)
                 for (const auto& child : if_stmt->else_block->stmts)
-                    mark_stmt(*child);
+                    check_stmt(*child);
         } else if (const auto* while_stmt = dynamic_cast<const ast::WhileStmt*>(&stmt)) {
-            mark_expr(*while_stmt->condition);
+            check_expr(*while_stmt->condition);
             for (const auto& child : while_stmt->body->stmts)
-                mark_stmt(*child);
+                check_stmt(*child);
         } else if (const auto* for_stmt = dynamic_cast<const ast::ForStmt*>(&stmt)) {
-            mark_expr(*for_stmt->begin);
-            mark_expr(*for_stmt->end);
+            check_expr(*for_stmt->begin);
+            check_expr(*for_stmt->end);
             for (const auto& child : for_stmt->body->stmts)
-                mark_stmt(*child);
+                check_stmt(*child);
         } else if (const auto* loop_stmt = dynamic_cast<const ast::LoopStmt*>(&stmt)) {
             for (const auto& child : loop_stmt->body->stmts)
-                mark_stmt(*child);
+                check_stmt(*child);
         } else if (const auto* block_stmt = dynamic_cast<const ast::BlockStmt*>(&stmt)) {
             for (const auto& child : block_stmt->stmts)
-                mark_stmt(*child);
+                check_stmt(*child);
         } else if (const auto* unsafe_stmt = dynamic_cast<const ast::UnsafeStmt*>(&stmt)) {
             for (const auto& child : unsafe_stmt->body->stmts)
-                mark_stmt(*child);
+                check_stmt(*child);
         }
     };
 
@@ -1040,7 +1094,7 @@ void TypeChecker::propagate_concurrency(ast::SmpMode mode) {
         if (!signature.is_concurrent || !signature.decl || !signature.decl->body)
             continue;
         for (const auto& statement : signature.decl->body->stmts)
-            mark_stmt(*statement);
+            check_stmt(*statement);
     }
 }
 

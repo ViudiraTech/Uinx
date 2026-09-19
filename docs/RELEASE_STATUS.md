@@ -5,11 +5,11 @@
 ## Verified in this release
 
 - Extended canonical syntax with `const`, `static`, `for`, `loop`, `break`, `continue`, explicit `move`, `where` bounds, bitwise/shift operators and compound assignments.
-- OS-aware SMP model with `concurrent`, `shared`, `percpu`, `smp auto/manual/strict`, explicit `fence` and `compiler_fence`.
-- Call-graph concurrency propagation and automatic atomic promotion for compatible mutable global/field state.
+- OS-aware explicit-shared SMP model (Rust+C++20+LKMM fusion) with `concurrent`, `shared`, `percpu`, `smp auto/manual/strict`, explicit `fence` and `compiler_fence`. No implicit atomic promotion.
+- Call-graph concurrency propagation and fail-closed E0363 rejection of concurrent access to non-shared mutable state.
 - Structural `Send`/`Sync` derivation, concurrent-parameter transfer checks, generic bound enforcement, and concise `unsafe send` / `unsafe sync` escape hatches for reviewed raw-pointer wrappers.
-- LLVM atomic load/store/RMW/fence lowering with acquire/release/acq_rel automatic ordering and seq_cst strict mode.
-- Freestanding `core::mem`, volatile pointer primitives, atomic primitives, and `SpinLock`.
+- Full-width LLVM atomic load/store/RMW/exchange/cmpxchg lowering (u8/u16/u32/u64) with C++20 ordering validation and seq_cst strict mode.
+- Freestanding `core::mem`, volatile pointer primitives, full `AtomicU8/U16/U32/U64/Bool` family, and `SpinLock/TicketSpinLock/RwSpinLock/SeqLock/Once/Barrier`.
 - Typed raw-pointer arithmetic and dereference assignment suitable for allocators, page tables and byte-memory code.
 - `uinx new <name> --kernel=<arch>` creates and cross-links x86-64, AArch64 and RISC-V64 kernel ELF projects.
 - MIR optimization now includes local load forwarding, constant folding and dead pure-SSA elimination in addition to unreachable-block removal.
@@ -21,7 +21,7 @@
 - Direct LLVM IR backend, object generation and separate link phase.
 - Static typing, local inference, generic functions/struct layouts, inline/`where` trait bounds, and concrete struct-bound checking for tested forms.
 - Trait implementation conformance and method calls, with compiler-enforced `Copy` eligibility that rejects mutable-reference fields and `Copy`/`Drop` conflicts.
-- Ownership moves and explicit `move`, affine mutable references, HIR binding-identity places, partial move/reinitialization, field-sensitive borrowing, conservative index aliasing, reference provenance through aggregates/calls/method receivers, backward liveness-based loan expiry, branch/loop fixed-point state merging, and stack-reference escape rejection for implemented forms.
+- Ownership moves and explicit `move`, affine mutable references, HIR binding-identity places, partial move/reinitialization, Rust-style precise place conflict (sibling-field disjoint, conservative index aliasing), Polonius-style loan liveness (root + precise-place), two-phase borrows for method receivers/function args/compound assignment, reference provenance through aggregates/calls/method receivers, backward liveness-based loan expiry, branch/loop fixed-point state merging, and stack-reference escape rejection for implemented forms.
 - Borrow dataflow uses a fail-closed non-convergence diagnostic instead of silently accepting an incomplete fixed point.
 - Safe Slice/SliceMut indexing with runtime bounds trap.
 - Synchronous RAII Drop calls for tested concrete types.
@@ -38,8 +38,8 @@
 
 The following items are intentionally not represented as passing merely because source declarations exist:
 
-- `UNVERIFIED`: formal proof that all safe Uinx programs are memory-safe/data-race-free in every lifetime, provenance, async, FFI and weak-memory edge case; implemented checks are conservative engineering mechanisms, not a theorem.
-- `UNVERIFIED`: rustc-equivalent region inference/Polonius semantics, two-phase borrows, every irreducible CFG shape, and formal equivalence to Rust's complete safe-reference model.
+- `UNVERIFIED`: formal proof that all safe Uinx programs are memory-safe/data-race-free in every lifetime, provenance, async, FFI and weak-memory edge case; implemented checks are conservative engineering mechanisms, not a theorem. Polonius-alpha + two-phase coverage is engineering parity for tested shapes, not a formal equivalence proof.
+- `UNVERIFIED`: full rustc-equivalent region inference for every irreducible CFG shape and formal equivalence to Rust's complete safe-reference model.
 - `UNVERIFIED`: self-hosting. The canonical compiler is C++20; no complete Uinx-written stage1 compiler is shipped yet. `BOOTSTRAP.md` defines the required stage0/stage1/stage2 criteria.
 - `UNVERIFIED`: generic Drop specialization for every nested generic ownership pattern and panic/unwind destruction.
 - `UNVERIFIED`: aggregate/bitfield/vector C ABI portability across all architectures and operating systems.

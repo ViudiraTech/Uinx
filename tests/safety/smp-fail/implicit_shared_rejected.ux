@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# EXPECT-DIAGNOSTIC: E0363
+dontneed std
+smp auto
+
+static var counter: u64 = 0
+
+public unsafe concurrent func bump() -> u64:
+    counter += 1
+    return counter

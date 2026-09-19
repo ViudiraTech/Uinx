@@ -18,11 +18,11 @@ Volatile `u8/u32/u64` read/write wrappers call compiler-recognized intrinsics th
 
 ### `core::atomic`
 
-`AtomicU64` exposes relaxed/acquire/release/acq_rel/compare-exchange operations. Compiler-recognized atomic ABI calls lower directly to LLVM atomic instructions in the verified freestanding paths.
+`AtomicU8/U16/U32/U64/Usize/Bool` expose relaxed/acquire/release/acq_rel/seq_cst load/store, swap, fetch-add/sub/and/or/xor, and compare-exchange (strong/weak). Compiler-recognized `uinx_atomic_*` calls with constant ordering lower directly to LLVM atomic instructions with C++20 ordering validation in the verified freestanding paths; hosted builds fall back to C11 stdatomic.
 
 ### `core::sync`
 
-`SpinLock` is a small freestanding lock built on `AtomicU64`. Kernels may wrap it with their own interrupt/preemption/lockdep/NUMA policy.
+Freestanding `SpinLock` (with backoff), fair `TicketSpinLock`, `RwSpinLock`, `SeqLock`, `Once`, and `Barrier`, all built on compiler-lowered atomics with LKMM roach-motel lock ordering. Kernels may wrap them with their own interrupt/preemption/lockdep/NUMA policy.
 
 ## `alloc`
 

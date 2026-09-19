@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# TEST: conformance.positive.struct-literal-coercion
+# Struct literal fields coerce integer literals across widths exactly like
+# call arguments and `let` bindings do (generic and concrete).
+dontneed std
+
+struct Packet:
+    tag: u64
+
+struct Envelope[T]:
+    inner: T
+
+func main() -> i32:
+    val packet = new Packet(tag=5)
+    val env = new Envelope[u64](inner=7)
+    return ((packet.tag + env.inner) as i32) - 12

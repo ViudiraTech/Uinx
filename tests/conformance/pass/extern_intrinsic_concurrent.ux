@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# TEST: conformance.positive.extern-intrinsic-concurrent
+# `extern` declarations are FFI trust boundaries: the `unsafe` block at the
+# Uinx call site is the audit point, so their raw-pointer parameters are
+# exempt from concurrent `Send` checks (E0362). Uinx-level callers stay
+# checked. Guards the `uinx_atomic_*` intrinsics used from concurrent paths.
+dontneed std
+smp auto
+
+unsafe extern "C" func uinx_atomic_compare_exchange_u64(ptr: mutptr u64, expected: mutptr u64, desired: u64, success_order: i32, failure_order: i32) -> i32
+
+shared var flag: u64 = 0
+
+public unsafe concurrent func worker() -> unit:
+    var expected: u64 = 0
+    unsafe:
+        val ok = uinx_atomic_compare_exchange_u64((borrow mut flag) as mutptr u64, borrow mut expected as mutptr u64, 1, 4, 1)
+        if ok != 0:
+            flag = 2
+    return
+
+func main() -> i32:
+    unsafe:
+        worker()
+    return (flag as i32) - 2

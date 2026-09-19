@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <rect x="4" y="4" width="248" height="248" rx="56" fill="#0F1B2D"/>
+  <rect x="4" y="4" width="248" height="248" rx="56" fill="none" stroke="#4C8BF5" stroke-opacity="0.25" stroke-width="2"/>
+  <!-- U shape: systems U, electric blue -->
+  <path d="M72 60 L72 152 Q72 192 128 192 Q184 192 184 152 L184 60"
+        fill="none" stroke="#4C8BF5" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- indentation steps inside the U -->
+  <rect x="96" y="104" width="40" height="8" rx="4" fill="#7FB0FF" fill-opacity="0.9"/>
+  <rect x="96" y="124" width="64" height="8" rx="4" fill="#7FB0FF" fill-opacity="0.65"/>
+  <rect x="96" y="144" width="28" height="8" rx="4" fill="#7FB0FF" fill-opacity="0.45"/>
+  <!-- bare-metal entry dot -->
+  <circle cx="184" cy="60" r="15" fill="#FFB224"/>
+  <circle cx="184" cy="60" r="15" fill="none" stroke="#0F1B2D" stroke-width="5"/>
+</svg>

@@ -1,0 +1,281 @@
+{
+  "name": "uinx-vscode",
+  "displayName": "Uinx",
+  "description": "Systems programming without syntax noise — syntax highlight, snippets, build tasks and LSP diagnostics for Uinx (.ux / .uxh).",
+  "version": "0.3.0",
+  "publisher": "ViudiraTech",
+  "license": "BSD-3-Clause",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/anomalyco/opencode"
+  },
+  "homepage": "https://opencode.ai/docs",
+  "icon": "images/icon.png",
+  "galleryBanner": {
+    "color": "#0F1B2D",
+    "theme": "dark"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters",
+    "Formatters"
+  ],
+  "keywords": [
+    "uinx",
+    "systems",
+    "llvm",
+    "smp",
+    "bare-metal",
+    "lsp"
+  ],
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "activationEvents": [
+    "onLanguage:uinx",
+    "onCommand:uinx.check",
+    "onCommand:uinx.build",
+    "onCommand:uinx.run"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "uinx",
+        "aliases": ["Uinx", "uinx"],
+        "extensions": [".ux", ".uxh"],
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./images/icon.png",
+          "dark": "./images/icon.png"
+        }
+      }
+    ],
+    "grammars": [
+      {
+        "language": "uinx",
+        "scopeName": "source.uinx",
+        "path": "./syntaxes/uinx.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "uinx",
+        "path": "./snippets/uinx.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "uinx.check",
+        "title": "Uinx: Check workspace",
+        "category": "Uinx"
+      },
+      {
+        "command": "uinx.build",
+        "title": "Uinx: Build",
+        "category": "Uinx"
+      },
+      {
+        "command": "uinx.run",
+        "title": "Uinx: Run",
+        "category": "Uinx"
+      },
+      {
+        "command": "uinx.test",
+        "title": "Uinx: Test",
+        "category": "Uinx"
+      },
+      {
+        "command": "uinx.fmt",
+        "title": "Uinx: Format file",
+        "category": "Uinx"
+      },
+      {
+        "command": "uinx.lint",
+        "title": "Uinx: Lint",
+        "category": "Uinx"
+      },
+      {
+        "command": "uinx.newProject",
+        "title": "Uinx: New project…",
+        "category": "Uinx"
+      },
+      {
+        "command": "uinx.restartServer",
+        "title": "Uinx: Restart language server",
+        "category": "Uinx"
+      },
+      {
+        "command": "uinx.showIR",
+        "title": "Uinx: Show LLVM IR (current file)",
+        "category": "Uinx"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "uinx.check",
+          "when": "editorLangId == uinx"
+        },
+        {
+          "command": "uinx.build",
+          "when": "editorLangId == uinx"
+        },
+        {
+          "command": "uinx.run",
+          "when": "editorLangId == uinx"
+        },
+        {
+          "command": "uinx.test",
+          "when": "editorLangId == uinx"
+        },
+        {
+          "command": "uinx.fmt",
+          "when": "editorLangId == uinx"
+        },
+        {
+          "command": "uinx.showIR",
+          "when": "editorLangId == uinx"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "uinx.check",
+          "when": "editorLangId == uinx",
+          "group": "uinx@1"
+        },
+        {
+          "command": "uinx.build",
+          "when": "editorLangId == uinx",
+          "group": "uinx@2"
+        },
+        {
+          "command": "uinx.fmt",
+          "when": "editorLangId == uinx",
+          "group": "uinx@3"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "uinx.check",
+        "key": "ctrl+shift+c",
+        "mac": "cmd+shift+c",
+        "when": "editorLangId == uinx"
+      },
+      {
+        "command": "uinx.build",
+        "key": "ctrl+shift+b",
+        "mac": "cmd+shift+b",
+        "when": "editorLangId == uinx"
+      }
+    ],
+    "configuration": {
+      "title": "Uinx",
+      "properties": {
+        "uinx.server.path": {
+          "type": "string",
+          "default": "uinx-lsp",
+          "description": "Path to the uinx-lsp language server binary. Falls back to bundled PATH lookup and then to uinxc diagnostics."
+        },
+        "uinx.uinxc.path": {
+          "type": "string",
+          "default": "uinxc",
+          "description": "Path to the uinxc compiler binary used for check/build/run and fallback diagnostics."
+        },
+        "uinx.tool.path": {
+          "type": "string",
+          "default": "uinx",
+          "description": "Path to the uinx project tool (new/build/run/test/fmt/lint)."
+        },
+        "uinx.smp": {
+          "type": "string",
+          "enum": ["auto", "manual", "strict"],
+          "default": "auto",
+          "description": "SMP policy override passed as --smp to check/build."
+        },
+        "uinx.target": {
+          "type": "string",
+          "default": "",
+          "description": "Optional target triple passed as --target (empty = host)."
+        },
+        "uinx.enableHeader": {
+          "type": "boolean",
+          "default": false,
+          "description": "Pass -enable-header to the compiler for .uxh header resolution."
+        },
+        "uinx.includeDirs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Extra -I include directories for header search."
+        },
+        "uinx.trace.server": {
+          "type": "string",
+          "enum": ["off", "messages", "verbose"],
+          "default": "off",
+          "description": "LSP message tracing for debugging."
+        },
+        "uinx.diagnostics.fallbackToUinxc": {
+          "type": "boolean",
+          "default": true,
+          "description": "When the language server is unavailable, run uinxc --emit=check on save for diagnostics."
+        },
+        "uinx.format.onSave": {
+          "type": "boolean",
+          "default": false,
+          "description": "Run uinx fmt on the file when saving (requires the uinx tool)."
+        }
+      }
+    },
+    "taskDefinitions": [
+      {
+        "type": "uinx",
+        "required": ["command"],
+        "properties": {
+          "command": {
+            "type": "string",
+            "enum": ["check", "build", "run", "test", "fmt", "lint"],
+            "description": "uinx project command to run."
+          },
+          "smp": {
+            "type": "string",
+            "enum": ["auto", "manual", "strict"],
+            "description": "Optional --smp override."
+          }
+        }
+      }
+    ],
+    "problemMatchers": [
+      {
+        "name": "uinx",
+        "owner": "uinx",
+        "fileLocation": ["relative", "${workspaceFolder}"],
+        "pattern": {
+          "regexp": "^(.*?):(\\d+):(\\d+):\\s+(error|warning)(?:\\[([A-Z0-9]+)\\])?:\\s*(.*)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "severity": 4,
+          "code": 5,
+          "message": 6
+        }
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts",
+    "package": "vsce package",
+    "vscode:prepublish": "npm run compile"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.3"
+  }
+}

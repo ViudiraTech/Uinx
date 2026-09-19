@@ -35,10 +35,117 @@ void uinx_atomic_store_u64(uint64_t* p, uint64_t v, int32_t o) {
 uint64_t uinx_atomic_fetch_add_u64(uint64_t* p, uint64_t v, int32_t o) {
     return atomic_fetch_add_explicit((_Atomic uint64_t*)p, v, to_order(o));
 }
+uint64_t uinx_atomic_fetch_sub_u64(uint64_t* p, uint64_t v, int32_t o) {
+    return atomic_fetch_sub_explicit((_Atomic uint64_t*)p, v, to_order(o));
+}
+uint64_t uinx_atomic_fetch_and_u64(uint64_t* p, uint64_t v, int32_t o) {
+    return atomic_fetch_and_explicit((_Atomic uint64_t*)p, v, to_order(o));
+}
+uint64_t uinx_atomic_fetch_or_u64(uint64_t* p, uint64_t v, int32_t o) {
+    return atomic_fetch_or_explicit((_Atomic uint64_t*)p, v, to_order(o));
+}
+uint64_t uinx_atomic_fetch_xor_u64(uint64_t* p, uint64_t v, int32_t o) {
+    return atomic_fetch_xor_explicit((_Atomic uint64_t*)p, v, to_order(o));
+}
+uint64_t uinx_atomic_exchange_u64(uint64_t* p, uint64_t v, int32_t o) {
+    return atomic_exchange_explicit((_Atomic uint64_t*)p, v, to_order(o));
+}
 int32_t
 uinx_atomic_compare_exchange_u64(uint64_t* p, uint64_t* e, uint64_t d, int32_t so, int32_t fo) {
     return atomic_compare_exchange_strong_explicit(
                (_Atomic uint64_t*)p, e, d, to_order(so), to_order(fo))
+               ? 1
+               : 0;
+}
+uint8_t uinx_atomic_load_u8(const uint8_t* p, int32_t o) {
+    return atomic_load_explicit((const _Atomic uint8_t*)p, to_order(o));
+}
+void uinx_atomic_store_u8(uint8_t* p, uint8_t v, int32_t o) {
+    atomic_store_explicit((_Atomic uint8_t*)p, v, to_order(o));
+}
+uint8_t uinx_atomic_fetch_add_u8(uint8_t* p, uint8_t v, int32_t o) {
+    return atomic_fetch_add_explicit((_Atomic uint8_t*)p, v, to_order(o));
+}
+uint8_t uinx_atomic_fetch_sub_u8(uint8_t* p, uint8_t v, int32_t o) {
+    return atomic_fetch_sub_explicit((_Atomic uint8_t*)p, v, to_order(o));
+}
+uint8_t uinx_atomic_fetch_and_u8(uint8_t* p, uint8_t v, int32_t o) {
+    return atomic_fetch_and_explicit((_Atomic uint8_t*)p, v, to_order(o));
+}
+uint8_t uinx_atomic_fetch_or_u8(uint8_t* p, uint8_t v, int32_t o) {
+    return atomic_fetch_or_explicit((_Atomic uint8_t*)p, v, to_order(o));
+}
+uint8_t uinx_atomic_fetch_xor_u8(uint8_t* p, uint8_t v, int32_t o) {
+    return atomic_fetch_xor_explicit((_Atomic uint8_t*)p, v, to_order(o));
+}
+uint8_t uinx_atomic_exchange_u8(uint8_t* p, uint8_t v, int32_t o) {
+    return atomic_exchange_explicit((_Atomic uint8_t*)p, v, to_order(o));
+}
+int32_t uinx_atomic_compare_exchange_u8(uint8_t* p, uint8_t* e, uint8_t d, int32_t so, int32_t fo) {
+    return atomic_compare_exchange_strong_explicit(
+               (_Atomic uint8_t*)p, e, d, to_order(so), to_order(fo))
+               ? 1
+               : 0;
+}
+uint16_t uinx_atomic_load_u16(const uint16_t* p, int32_t o) {
+    return atomic_load_explicit((const _Atomic uint16_t*)p, to_order(o));
+}
+void uinx_atomic_store_u16(uint16_t* p, uint16_t v, int32_t o) {
+    atomic_store_explicit((_Atomic uint16_t*)p, v, to_order(o));
+}
+uint16_t uinx_atomic_fetch_add_u16(uint16_t* p, uint16_t v, int32_t o) {
+    return atomic_fetch_add_explicit((_Atomic uint16_t*)p, v, to_order(o));
+}
+uint16_t uinx_atomic_fetch_sub_u16(uint16_t* p, uint16_t v, int32_t o) {
+    return atomic_fetch_sub_explicit((_Atomic uint16_t*)p, v, to_order(o));
+}
+uint16_t uinx_atomic_fetch_and_u16(uint16_t* p, uint16_t v, int32_t o) {
+    return atomic_fetch_and_explicit((_Atomic uint16_t*)p, v, to_order(o));
+}
+uint16_t uinx_atomic_fetch_or_u16(uint16_t* p, uint16_t v, int32_t o) {
+    return atomic_fetch_or_explicit((_Atomic uint16_t*)p, v, to_order(o));
+}
+uint16_t uinx_atomic_fetch_xor_u16(uint16_t* p, uint16_t v, int32_t o) {
+    return atomic_fetch_xor_explicit((_Atomic uint16_t*)p, v, to_order(o));
+}
+uint16_t uinx_atomic_exchange_u16(uint16_t* p, uint16_t v, int32_t o) {
+    return atomic_exchange_explicit((_Atomic uint16_t*)p, v, to_order(o));
+}
+int32_t
+uinx_atomic_compare_exchange_u16(uint16_t* p, uint16_t* e, uint16_t d, int32_t so, int32_t fo) {
+    return atomic_compare_exchange_strong_explicit(
+               (_Atomic uint16_t*)p, e, d, to_order(so), to_order(fo))
+               ? 1
+               : 0;
+}
+uint32_t uinx_atomic_load_u32(const uint32_t* p, int32_t o) {
+    return atomic_load_explicit((const _Atomic uint32_t*)p, to_order(o));
+}
+void uinx_atomic_store_u32(uint32_t* p, uint32_t v, int32_t o) {
+    atomic_store_explicit((_Atomic uint32_t*)p, v, to_order(o));
+}
+uint32_t uinx_atomic_fetch_add_u32(uint32_t* p, uint32_t v, int32_t o) {
+    return atomic_fetch_add_explicit((_Atomic uint32_t*)p, v, to_order(o));
+}
+uint32_t uinx_atomic_fetch_sub_u32(uint32_t* p, uint32_t v, int32_t o) {
+    return atomic_fetch_sub_explicit((_Atomic uint32_t*)p, v, to_order(o));
+}
+uint32_t uinx_atomic_fetch_and_u32(uint32_t* p, uint32_t v, int32_t o) {
+    return atomic_fetch_and_explicit((_Atomic uint32_t*)p, v, to_order(o));
+}
+uint32_t uinx_atomic_fetch_or_u32(uint32_t* p, uint32_t v, int32_t o) {
+    return atomic_fetch_or_explicit((_Atomic uint32_t*)p, v, to_order(o));
+}
+uint32_t uinx_atomic_fetch_xor_u32(uint32_t* p, uint32_t v, int32_t o) {
+    return atomic_fetch_xor_explicit((_Atomic uint32_t*)p, v, to_order(o));
+}
+uint32_t uinx_atomic_exchange_u32(uint32_t* p, uint32_t v, int32_t o) {
+    return atomic_exchange_explicit((_Atomic uint32_t*)p, v, to_order(o));
+}
+int32_t
+uinx_atomic_compare_exchange_u32(uint32_t* p, uint32_t* e, uint32_t d, int32_t so, int32_t fo) {
+    return atomic_compare_exchange_strong_explicit(
+               (_Atomic uint32_t*)p, e, d, to_order(so), to_order(fo))
                ? 1
                : 0;
 }

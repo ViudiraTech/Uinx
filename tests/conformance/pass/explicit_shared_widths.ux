@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# TEST: conformance.positive.explicit-shared-widths
+# EXPECT: compile-pass
+
+dontneed std
+smp auto
+
+shared var c8: u8 = 0
+shared var c16: u16 = 0
+shared var c32: u32 = 0
+shared var c64: u64 = 0
+shared var flag: u8 = 0
+
+public unsafe concurrent func bump() -> u64:
+    c8 += 1
+    c16 += 1
+    c32 += 1
+    c64 += 1
+    flag = 1
+    fence release
+    compiler_fence acquire
+    return c64

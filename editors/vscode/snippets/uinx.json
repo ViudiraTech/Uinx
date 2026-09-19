@@ -1,0 +1,163 @@
+{
+  "Uinx function": {
+    "prefix": "func",
+    "body": ["func ${1:name}(${2:args}) -> ${3:i32}:", "    ${0:return}"],
+    "description": "Function definition"
+  },
+  "Uinx concurrent entry": {
+    "prefix": "concurrent",
+    "body": [
+      "public unsafe concurrent func ${1:cpu_entry}() -> unit:",
+      "    ${0:return}"
+    ],
+    "description": "SMP concurrent entry point"
+  },
+  "Uinx struct": {
+    "prefix": "struct",
+    "body": ["struct ${1:Name}:", "    ${2:field}: ${3:i32}"],
+    "description": "Struct definition"
+  },
+  "Uinx struct new": {
+    "prefix": "new",
+    "body": ["new ${1:Type}(${2:field}=${3:value})"],
+    "description": "Struct construction"
+  },
+  "Uinx extend": {
+    "prefix": "extend",
+    "body": [
+      "extend ${1:Type}:",
+      "    public func ${2:method}(self: ${3:ref Self}) -> ${4:i32}:",
+      "        ${0:return}"
+    ],
+    "description": "Inherent impl block"
+  },
+  "Uinx trait": {
+    "prefix": "trait",
+    "body": [
+      "trait ${1:Readable}:",
+      "    func ${2:read}(self: ref Self) -> i32",
+      "",
+      "extend ${3:Cell} with ${1:Readable}:",
+      "    func ${2:read}(self: ref Self) -> i32:",
+      "        ${0:return self.value}"
+    ],
+    "description": "Trait declaration + impl"
+  },
+  "Uinx shared state": {
+    "prefix": "shared",
+    "body": ["shared var ${1:counter}: ${2:u64} = 0"],
+    "description": "Explicit shared atomic-compatible state"
+  },
+  "Uinx percpu state": {
+    "prefix": "percpu",
+    "body": ["percpu var ${1:ticks}: ${2:u64} = 0"],
+    "description": "Per-CPU TLS state"
+  },
+  "Uinx borrow": {
+    "prefix": "borrow",
+    "body": ["borrow ${1:value}"],
+    "description": "Shared borrow"
+  },
+  "Uinx borrow mut": {
+    "prefix": "borrowmut",
+    "body": ["borrow mut ${1:value}"],
+    "description": "Exclusive borrow"
+  },
+  "Uinx unsafe block": {
+    "prefix": "unsafe",
+    "body": ["unsafe:", "    ${0:pass}"],
+    "description": "Unsafe block"
+  },
+  "Uinx fence": {
+    "prefix": "fence",
+    "body": ["fence ${1|acquire,release,acq_rel,seq_cst|}"],
+    "description": "Hardware fence"
+  },
+  "Uinx compiler fence": {
+    "prefix": "compiler_fence",
+    "body": ["compiler_fence ${1|acquire,release,acq_rel,seq_cst|}"],
+    "description": "Compiler ordering barrier"
+  },
+  "Uinx atomic u64": {
+    "prefix": "atomic",
+    "body": [
+      "var ${1:counter} = new AtomicU64(value=0)",
+      "${1:counter}.fetch_add(1)",
+      "val ${2:value} = ${1:counter}.load()"
+    ],
+    "description": "AtomicU64 counter"
+  },
+  "Uinx spinlock": {
+    "prefix": "spinlock",
+    "body": [
+      "var ${1:lock} = new SpinLock(state=new AtomicU64(value=0))",
+      "",
+      "${1:lock}.lock()",
+      "${0:# protected state}",
+      "${1:lock}.unlock()"
+    ],
+    "description": "SpinLock guard"
+  },
+  "Uinx async": {
+    "prefix": "async",
+    "body": [
+      "async func ${1:task}() -> ${2:i32}:",
+      "    val value = await ${3:child()}",
+      "    return value"
+    ],
+    "description": "Async function with await"
+  },
+  "Uinx polling scheduler": {
+    "prefix": "smp-sched",
+    "body": [
+      "dontneed std",
+      "need core",
+      "smp auto",
+      "",
+      "shared var ${1:completed}: u64 = 0",
+      "percpu var ${2:ticks}: u64 = 0",
+      "",
+      "public unsafe concurrent func ${3:cpu_entry}() -> unit:",
+      "    loop:",
+      "        ${2:ticks} += 1",
+      "        ${1:completed} += 1",
+      "        compiler_fence release"
+    ],
+    "description": "SMP polling loop skeleton"
+  },
+  "Uinx freestanding main": {
+    "prefix": "kernelmain",
+    "body": [
+      "dontneed std",
+      "need core",
+      "smp auto",
+      "",
+      "public unsafe concurrent func kernel_main() -> unit:",
+      "    ${0:return}"
+    ],
+    "description": "Freestanding kernel entry"
+  },
+  "Uinx if": {
+    "prefix": "if",
+    "body": ["if ${1:cond}:", "    ${0:pass}"],
+    "description": "If block"
+  },
+  "Uinx while": {
+    "prefix": "while",
+    "body": ["while ${1:cond}:", "    ${0:pass}"],
+    "description": "While loop"
+  },
+  "Uinx loop": {
+    "prefix": "loop",
+    "body": ["loop:", "    if ${1:done}:", "        break", "    ${0:pass}"],
+    "description": "Loop with break"
+  },
+  "Uinx match on Send": {
+    "prefix": "sendsync",
+    "body": [
+      "unsafe send ${1:Box}[T] where T: Send",
+      "unsafe sync ${1:Box}[T] where T: Send + Sync"
+    ],
+    "description": "Reviewed Send/Sync markers"
+  }
+}

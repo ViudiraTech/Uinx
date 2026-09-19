@@ -1,0 +1,280 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# Complex multi-core SMP program: ticket lock + spin lock + barrier +
+# seqlock + mailbox + multi-width histogram + generic Send payloads +
+# two-phase borrows, exercised over 4 simulated CPUs x 2 rounds.
+# Hosted `main` drives the phases sequentially (exit 0 on checksum match);
+# `cpu_entry` is the true bare-metal SMP shape (checked + IR-verified).
+
+dontneed std
+smp auto
+
+# ---- freestanding-friendly raw atomics (lowered directly to LLVM) ----
+unsafe extern "C" func uinx_atomic_fetch_add_u64(ptr: mutptr u64, value: u64, order: i32) -> u64
+unsafe extern "C" func uinx_atomic_compare_exchange_u64(ptr: mutptr u64, expected: mutptr u64, desired: u64, success_order: i32, failure_order: i32) -> i32
+unsafe extern "C" func uinx_atomic_exchange_u32(ptr: mutptr u32, value: u32, order: i32) -> u32
+
+# ---- shared cluster state ----
+shared var online_cpus: u64 = 0
+shared var boot_done: u64 = 0
+shared var completed: u64 = 0
+shared var arrived: u64 = 0
+shared var generation: u64 = 0
+
+# multi-width histogram bins (every width lowers to its own atomicrmw)
+shared var bin8: u8 = 0
+shared var bin16: u16 = 0
+shared var bin32: u32 = 0
+shared var bin64: u64 = 0
+
+# seqlock: even seq = stable, odd = writer inside
+shared var seq: u64 = 0
+shared var slot: u64 = 0
+
+# ticket lock state
+shared var ticket_next: u64 = 0
+shared var ticket_serving: u64 = 0
+
+# simple spinlock flag
+shared var spin_flag: u64 = 0
+
+# u32 mailbox handoff
+shared var mbox: u32 = 100
+
+struct RunQueue:
+    shared head: u64
+    shared tail: u64
+    depth: u64
+
+static var queue: RunQueue = new RunQueue(head=0, tail=0, depth=0)
+
+percpu var cpu_id: u64 = 0
+percpu var local_ticks: u64 = 0
+percpu var local_sum: u64 = 0
+
+struct Packet:
+    tag: u64
+
+unsafe send Packet
+unsafe sync Packet
+
+struct Envelope[T]:
+    inner: T
+
+unsafe send Envelope[T] where T: Send
+unsafe sync Envelope[T] where T: Send + Sync
+
+struct Counter:
+    value: i32
+
+extend Counter:
+    public func len(self: ref Self) -> i32:
+        return self.value
+    public func push(self: mutref Self, delta: i32) -> unit:
+        self.value += delta
+        return
+
+# ---- synchronization primitives over shared state ----
+
+func spin_lock() -> unit:
+    loop:
+        var expected: u64 = 0
+        unsafe:
+            val ok = uinx_atomic_compare_exchange_u64((borrow mut spin_flag) as mutptr u64, borrow mut expected as mutptr u64, 1, 4, 1)
+            if ok != 0:
+                fence acquire
+                return
+        compiler_fence acquire
+    return
+
+func spin_unlock() -> unit:
+    fence release
+    spin_flag = 0
+    return
+
+func ticket_lock() -> u64:
+    unsafe:
+        val ticket = uinx_atomic_fetch_add_u64((borrow mut ticket_next) as mutptr u64, 1, 3)
+        loop:
+            val cur = ticket_serving
+            if cur == ticket:
+                fence acquire
+                return ticket
+            compiler_fence acquire
+    return 0
+
+func ticket_unlock() -> unit:
+    fence release
+    ticket_serving += 1
+    return
+
+func seqlock_write(value: u64) -> unit:
+    seq += 1
+    compiler_fence release
+    slot = value
+    fence release
+    seq += 1
+    return
+
+func seqlock_read() -> u64:
+    loop:
+        val s0 = seq
+        if s0 % 2 != 0:
+            compiler_fence acquire
+            continue
+        compiler_fence acquire
+        val data = slot
+        compiler_fence acquire
+        val s1 = seq
+        if s1 == s0:
+            fence acquire
+            return data
+    return 0
+
+func barrier_arrive() -> unit:
+    arrived += 1
+    fence release
+    return
+
+func barrier_release() -> unit:
+    fence acquire
+    generation += 1
+    fence seq_cst
+    return
+
+# ---- worker payloads ----
+
+func handle_envelope(packet: Envelope[u64]) -> u64:
+    return packet.inner
+
+func sibling_sum(left: mutref i32, right: ref i32) -> i32:
+    deref left += deref right
+    return deref left
+
+struct Pair:
+    left: i32
+    right: i32
+
+func disjoint_demo() -> i32:
+    var pair = new Pair(left=20, right=22)
+    val l = borrow mut pair.left
+    val r = borrow pair.right
+    return sibling_sum(l, r)
+
+func histogram_add(amount: u64) -> unit:
+    val ticket = ticket_lock()
+    spin_lock()
+    bin8 += (amount as u8)
+    bin16 += (amount as u16)
+    bin32 += (amount as u32)
+    spin_unlock()
+    bin64 += amount
+    ticket_unlock()
+    if ticket > 1000000:
+        completed += 0
+    return
+
+func mailbox_deposit(value: u32) -> u32:
+    unsafe:
+        return uinx_atomic_exchange_u32((borrow mut mbox) as mutptr u32, value, 3)
+
+func queue_push(id: u64) -> unit:
+    queue.head += 1
+    queue.tail += id
+    compiler_fence release
+    return
+
+func worker_round(id: u64) -> u64:
+    local_ticks += 1
+    histogram_add(id + 1)
+    seqlock_write(id * 10 + local_ticks)
+    queue_push(id)
+    val old = mailbox_deposit(id as u32)
+    local_sum += (old as u64)
+    barrier_arrive()
+    var counter = new Counter(value=40)
+    counter.push(counter.len())
+    val check = disjoint_demo()
+    local_sum += ((check - 42) as u64)
+    completed += 1
+    return seqlock_read()
+
+# ---- generic + Send-checked concurrent entry ----
+
+func handle_packet(packet: Packet) -> u64:
+    return packet.tag
+
+public concurrent func packet_entry(packet: Packet) -> u64:
+    return handle_packet(packet)
+
+# ---- true bare-metal SMP shape (checked + IR-verified) ----
+
+public unsafe concurrent func cpu_entry(id: u64) -> unit:
+    online_cpus += 1
+    fence release
+    while boot_done == 0:
+        compiler_fence acquire
+    fence acquire
+    val ticket = ticket_lock()
+    worker_round(id)
+    ticket_unlock()
+    fence acq_rel
+    val g = generation
+    loop:
+        val cur = generation
+        if cur != g:
+            break
+        compiler_fence acquire
+    val seen = seqlock_read()
+    local_sum += seen
+    completed += 1
+    fence seq_cst
+    return
+
+# ---- hosted orchestration: 4 simulated CPUs x 2 rounds ----
+
+func init_phase() -> unit:
+    queue.depth = 8
+    return
+
+func main() -> i32:
+    init_phase()
+    val env = new Envelope[u64](inner=7)
+    val e7 = handle_envelope(env)
+    val pack = new Packet(tag=5)
+    val p5 = packet_entry(pack)
+    for round in 0 .. 2:
+        worker_round(0)
+        worker_round(1)
+        worker_round(2)
+        worker_round(3)
+        barrier_release()
+    val b32 = bin32 as u64
+    val b16 = bin16 as u64
+    val b8 = bin8 as u64
+    val bins_total = bin64 + b32 + b16 + b8
+    if bins_total != 80:
+        return 1
+    if local_sum != 109:
+        return 2
+    if mbox != 3:
+        return 3
+    if queue.head != 8:
+        return 4
+    if queue.tail != 12:
+        return 5
+    if completed != 8:
+        return 6
+    if arrived != 8:
+        return 7
+    if generation != 2:
+        return 8
+    if slot != 38:
+        return 9
+    if e7 + p5 != 12:
+        return 10
+    if queue.depth != 8:
+        return 11
+    return 0

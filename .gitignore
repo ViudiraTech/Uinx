@@ -1,7 +1,9 @@
 /build/
 /build-*/
+/Testing/
 .uinx/
 target/
 *.o
 *.ll
 *.elf
+*.vsix

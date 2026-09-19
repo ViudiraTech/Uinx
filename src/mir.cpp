@@ -67,11 +67,8 @@ Type MIRLowerer::expr_type(const ast::Expr& e, const FnState& s) const {
     auto it = model_.expr_types.find(&e);
     return it == model_.expr_types.end() ? Type{} : subst_type(it->second, s);
 }
-std::string MIRLowerer::coerce_value(FnState& s,
-                                     std::string value,
-                                     const Type& from,
-                                     const Type& to,
-                                     const SourceRange& range) {
+std::string MIRLowerer::coerce_value(
+    FnState& s, std::string value, const Type& from, const Type& to, const SourceRange& range) {
     if (from == to || value == "undef" || value.empty())
         return value;
     // Integer literals are allowed to coerce across widths in sema
@@ -250,18 +247,20 @@ void MIRLowerer::lower_block(const ast::BlockStmt& b, FnState& s) {
 }
 bool MIRLowerer::place_is_atomic(const ast::Expr& e, const FnState& s) const {
     const Type ty = expr_type(e, s);
-    const bool compatible =
-        ty.is_integer() || ty.kind == TypeKind::Bool || ty.kind == TypeKind::RawPtr;
+    // Bool excluded: LLVM i1 atomics are invalid (byte-sized required).
+    // Use AtomicBool (u8-backed) instead.
+    const bool compatible = ty.is_integer() || ty.kind == TypeKind::RawPtr;
     if (!compatible)
         return false;
+    (void)s;
+    // Explicit-shared only: smp auto no longer promotes. Only `shared`
+    // globals/fields lower to LLVM atomics. percpu is never atomic.
     if (e.kind == ast::ExprKind::Name) {
         const auto& n = static_cast<const ast::NameExpr&>(e);
         auto g = model_.globals.find(n.name);
         if (g == model_.globals.end() || g->second.is_percpu)
             return false;
-        if (g->second.is_shared)
-            return true;
-        return s.smp_mode != ast::SmpMode::Manual && s.concurrent && g->second.is_mut;
+        return g->second.is_shared;
     }
     if (e.kind == ast::ExprKind::Member) {
         const auto& m = static_cast<const ast::MemberExpr&>(e);
@@ -758,6 +757,18 @@ std::pair<std::string, Type> MIRLowerer::lower_expr(const ast::Expr& e, FnState&
             std::unordered_map<std::string, const ast::Expr*> values;
             for (const auto& f : st.fields)
                 values[f.name] = f.value.get();
+            // Expected field types under the call-site substitution, so
+            // integer literals coerce across widths exactly like call
+            // arguments and `let` bindings do (sema permits them via
+            // `can_coerce_expr`; the backend must never see mismatched
+            // operand types, e.g. i32 `7` into a u64 generic field).
+            std::unordered_set<std::string> field_generics(si->second.generic_names.begin(),
+                                                           si->second.generic_names.end());
+            std::unordered_map<std::string, Type> field_subst;
+            for (std::size_t i = 0;
+                 i < si->second.generic_names.size() && i < ty.args.size();
+                 ++i)
+                field_subst[si->second.generic_names[i]] = ty.args[i];
             std::vector<std::string> args;
             for (const auto& decl_field : si->second.decl->fields) {
                 auto it = values.find(decl_field.name);
@@ -765,7 +776,11 @@ std::pair<std::string, Type> MIRLowerer::lower_expr(const ast::Expr& e, FnState&
                     args.push_back("undef");
                     continue;
                 }
-                args.push_back(lower_expr(*it->second, s).first);
+                auto [field_value, field_actual] = lower_expr(*it->second, s);
+                const Type field_expected = substitute_type(
+                    type_from_ast(decl_field.type, field_generics), field_subst);
+                args.push_back(
+                    coerce_value(s, field_value, field_actual, field_expected, it->second->range));
             }
             std::string r = temp(s);
             emit(s, {mir::Op::StructInit, r, ty, std::move(args), "", {}, false, e.range});

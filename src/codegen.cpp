@@ -206,6 +206,116 @@ std::string cmpxchg_failure_order(std::string order) {
     return order;
 }
 
+// Industrial C++20 ordering validation (Rust + C++20 + LKMM fusion).
+// load: relaxed/acquire/seq_cst; store: relaxed/release/seq_cst;
+// rmw/exchange: all five; cmpxchg failure: never release/acq_rel.
+bool valid_atomic_load_order(std::string_view order) {
+    return order == "monotonic" || order == "acquire" || order == "seq_cst";
+}
+
+bool valid_atomic_store_order(std::string_view order) {
+    return order == "monotonic" || order == "release" || order == "seq_cst";
+}
+
+bool valid_atomic_rmw_order(std::string_view order) {
+    return order == "monotonic" || order == "acquire" || order == "release" || order == "acq_rel" ||
+           order == "seq_cst";
+}
+
+int order_strength(std::string_view order) {
+    if (order == "monotonic")
+        return 0;
+    if (order == "acquire" || order == "release")
+        return 1;
+    if (order == "acq_rel")
+        return 2;
+    if (order == "seq_cst")
+        return 3;
+    return -1;
+}
+
+std::string downgrade_cmpxchg_failure(std::string success, std::string failure) {
+    failure = cmpxchg_failure_order(std::move(failure));
+    // Failure ordering must not exceed success ordering.
+    if (order_strength(failure) > order_strength(success)) {
+        if (success == "monotonic" || success == "release")
+            return "monotonic";
+        return "acquire";
+    }
+    return failure;
+}
+
+struct AtomicIntrinsic {
+    std::string llvm_type;
+    unsigned align;
+    std::string rmw_op; // add/sub/and/or/xor/xchg/cmpxchg/load/store
+};
+
+std::optional<AtomicIntrinsic> parse_atomic_intrinsic(std::string_view name) {
+    // uinx_atomic_{load,store,fetch_add,fetch_sub,fetch_and,fetch_or,fetch_xor,
+    // exchange,compare_exchange}_{u8,u16,u32,u64}
+    static constexpr std::string_view prefix = "uinx_atomic_";
+    if (!name.starts_with(prefix))
+        return std::nullopt;
+    std::string_view rest = name.substr(prefix.size());
+    std::string op;
+    for (std::string_view candidate : {"compare_exchange",
+                                       "fetch_add",
+                                       "fetch_sub",
+                                       "fetch_and",
+                                       "fetch_or",
+                                       "fetch_xor",
+                                       "exchange",
+                                       "load",
+                                       "store"}) {
+        if (rest.starts_with(candidate)) {
+            op = std::string(candidate);
+            rest = rest.substr(candidate.size());
+            break;
+        }
+    }
+    if (op.empty() || !rest.starts_with("_"))
+        return std::nullopt;
+    std::string_view width = rest.substr(1);
+    std::string llvm_type;
+    unsigned align = 1;
+    if (width == "u8") {
+        llvm_type = "i8";
+        align = 1;
+    } else if (width == "u16") {
+        llvm_type = "i16";
+        align = 2;
+    } else if (width == "u32") {
+        llvm_type = "i32";
+        align = 4;
+    } else if (width == "u64") {
+        llvm_type = "i64";
+        align = 8;
+    } else {
+        return std::nullopt;
+    }
+    std::string rmw;
+    if (op == "load")
+        rmw = "load";
+    else if (op == "store")
+        rmw = "store";
+    else if (op == "fetch_add")
+        rmw = "add";
+    else if (op == "fetch_sub")
+        rmw = "sub";
+    else if (op == "fetch_and")
+        rmw = "and";
+    else if (op == "fetch_or")
+        rmw = "or";
+    else if (op == "fetch_xor")
+        rmw = "xor";
+    else if (op == "exchange")
+        rmw = "xchg";
+    else if (op == "compare_exchange")
+        rmw = "cmpxchg";
+    return AtomicIntrinsic{llvm_type, align, rmw};
+}
+
 // Number of arguments encoded in a uinx_syscallN intrinsic name, or
 // std::nullopt when the symbol is an ordinary runtime call.
 std::optional<int> syscall_arity_from_name(std::string_view name) {
@@ -559,8 +669,7 @@ bool LLVMCodegen::emit_syscall(std::ostream& os,
         } else {
             args.push_back("%syscall.arg." + std::to_string(counter) + "." +
                            std::to_string(args.size()));
-            os << "  " << args.back() << " = zext " << llvm_type(type) << ' ' << raw
-               << " to i64\n";
+            os << "  " << args.back() << " = zext " << llvm_type(type) << ' ' << raw << " to i64\n";
         }
     }
 
@@ -982,7 +1091,8 @@ void LLVMCodegen::emit_async_function(
                         std::unordered_map<std::string, std::string> syscall_values;
                         for (const auto& arg : instruction.args)
                             syscall_values[arg] = value_of(arg);
-                        if (emit_syscall(os, instruction, syscall_values, value_types, temp_counter)) {
+                        if (emit_syscall(
+                                os, instruction, syscall_values, value_types, temp_counter)) {
                             if (!instruction.result.empty()) {
                                 const auto it = syscall_values.find(instruction.result);
                                 if (it != syscall_values.end())
@@ -1453,67 +1563,83 @@ void LLVMCodegen::emit_function(
                            << type_alignment(value_type) << "\n";
                         break;
                     }
-                    if (instruction.text == "uinx_atomic_load_u64" &&
-                        instruction.args.size() == 2) {
-                        if (auto order = atomic_order_from_abi(value_of(instruction.args[1]));
-                            order && *order != "release" && *order != "acq_rel") {
-                            os << "  " << instruction.result << " = load atomic i64, ptr "
-                               << value_of(instruction.args[0]) << ' ' << *order << ", align 8\n";
-                            values[instruction.result] = instruction.result;
-                            value_types[instruction.result] = instruction.type;
-                            break;
-                        }
-                    }
-                    if (instruction.text == "uinx_atomic_store_u64" &&
-                        instruction.args.size() == 3) {
-                        if (auto order = atomic_order_from_abi(value_of(instruction.args[2]));
-                            order && *order != "acquire" && *order != "acq_rel") {
-                            os << "  store atomic i64 " << value_of(instruction.args[1]) << ", ptr "
-                               << value_of(instruction.args[0]) << ' ' << *order << ", align 8\n";
-                            break;
-                        }
-                    }
-                    if (instruction.text == "uinx_atomic_fetch_add_u64" &&
-                        instruction.args.size() == 3) {
-                        if (auto order = atomic_order_from_abi(value_of(instruction.args[2]))) {
-                            os << "  " << instruction.result << " = atomicrmw add ptr "
-                               << value_of(instruction.args[0]) << ", i64 "
-                               << value_of(instruction.args[1]) << ' ' << *order << ", align 8\n";
-                            values[instruction.result] = instruction.result;
-                            value_types[instruction.result] = instruction.type;
-                            break;
-                        }
-                    }
-                    if (instruction.text == "uinx_atomic_compare_exchange_u64" &&
-                        instruction.args.size() == 5) {
-                        auto success = atomic_order_from_abi(value_of(instruction.args[3]));
-                        auto failure = atomic_order_from_abi(value_of(instruction.args[4]));
-                        if (success && failure) {
-                            const std::string id = std::to_string(atomic_counter++);
-                            const std::string expected = "%cas.expected." + id;
-                            const std::string pair = "%cas.pair." + id;
-                            const std::string old = "%cas.old." + id;
-                            const std::string ok = "%cas.ok." + id;
-                            const std::string result = instruction.result.empty()
-                                                           ? "%cas.result." + id
-                                                           : instruction.result;
-                            os << "  " << expected << " = load i64, ptr "
-                               << value_of(instruction.args[1]) << ", align 8\n";
-                            os << "  " << pair << " = cmpxchg ptr " << value_of(instruction.args[0])
-                               << ", i64 " << expected << ", i64 " << value_of(instruction.args[2])
-                               << ' ' << *success << ' ' << cmpxchg_failure_order(*failure)
-                               << ", align 8\n";
-                            os << "  " << old << " = extractvalue { i64, i1 } " << pair << ", 0\n";
-                            os << "  " << ok << " = extractvalue { i64, i1 } " << pair << ", 1\n";
-                            os << "  store i64 " << old << ", ptr " << value_of(instruction.args[1])
-                               << ", align 8\n";
-                            os << "  " << result << " = zext i1 " << ok << " to i32\n";
-                            if (!instruction.result.empty()) {
-                                values[instruction.result] = result;
+                    if (auto intrinsic = parse_atomic_intrinsic(instruction.text)) {
+                        const std::string& llvm_ty = intrinsic->llvm_type;
+                        const unsigned align = intrinsic->align;
+                        const std::string& rmw = intrinsic->rmw_op;
+                        if (rmw == "load" && instruction.args.size() == 2) {
+                            if (auto order = atomic_order_from_abi(value_of(instruction.args[1]));
+                                order && valid_atomic_load_order(*order)) {
+                                os << "  " << instruction.result << " = load atomic " << llvm_ty
+                                   << ", ptr " << value_of(instruction.args[0]) << ' ' << *order
+                                   << ", align " << align << "\n";
+                                values[instruction.result] = instruction.result;
                                 value_types[instruction.result] = instruction.type;
+                                break;
                             }
-                            break;
                         }
+                        if (rmw == "store" && instruction.args.size() == 3) {
+                            if (auto order = atomic_order_from_abi(value_of(instruction.args[2]));
+                                order && valid_atomic_store_order(*order)) {
+                                os << "  store atomic " << llvm_ty << ' '
+                                   << value_of(instruction.args[1]) << ", ptr "
+                                   << value_of(instruction.args[0]) << ' ' << *order << ", align "
+                                   << align << "\n";
+                                break;
+                            }
+                        }
+                        if ((rmw == "add" || rmw == "sub" || rmw == "and" || rmw == "or" ||
+                             rmw == "xor" || rmw == "xchg") &&
+                            instruction.args.size() == 3) {
+                            if (auto order = atomic_order_from_abi(value_of(instruction.args[2]));
+                                order && valid_atomic_rmw_order(*order)) {
+                                os << "  " << instruction.result << " = atomicrmw " << rmw
+                                   << " ptr " << value_of(instruction.args[0]) << ", " << llvm_ty
+                                   << ' ' << value_of(instruction.args[1]) << ' ' << *order
+                                   << ", align " << align << "\n";
+                                values[instruction.result] = instruction.result;
+                                value_types[instruction.result] = instruction.type;
+                                break;
+                            }
+                        }
+                        if (rmw == "cmpxchg" && instruction.args.size() == 5) {
+                            auto success = atomic_order_from_abi(value_of(instruction.args[3]));
+                            auto failure = atomic_order_from_abi(value_of(instruction.args[4]));
+                            if (success && failure && valid_atomic_rmw_order(*success) &&
+                                (valid_atomic_load_order(*failure) || *failure == "monotonic")) {
+                                const std::string failure_fixed =
+                                    downgrade_cmpxchg_failure(*success, *failure);
+                                const std::string id = std::to_string(atomic_counter++);
+                                const std::string expected = "%cas.expected." + id;
+                                const std::string pair = "%cas.pair." + id;
+                                const std::string old = "%cas.old." + id;
+                                const std::string ok = "%cas.ok." + id;
+                                const std::string result = instruction.result.empty()
+                                                               ? "%cas.result." + id
+                                                               : instruction.result;
+                                os << "  " << expected << " = load " << llvm_ty << ", ptr "
+                                   << value_of(instruction.args[1]) << ", align " << align << "\n";
+                                os << "  " << pair << " = cmpxchg ptr "
+                                   << value_of(instruction.args[0]) << ", " << llvm_ty << ' '
+                                   << expected << ", " << llvm_ty << ' '
+                                   << value_of(instruction.args[2]) << ' ' << *success << ' '
+                                   << failure_fixed << ", align " << align << "\n";
+                                os << "  " << old << " = extractvalue { " << llvm_ty << ", i1 } "
+                                   << pair << ", 0\n";
+                                os << "  " << ok << " = extractvalue { " << llvm_ty << ", i1 } "
+                                   << pair << ", 1\n";
+                                os << "  store " << llvm_ty << ' ' << old << ", ptr "
+                                   << value_of(instruction.args[1]) << ", align " << align << "\n";
+                                os << "  " << result << " = zext i1 " << ok << " to i32\n";
+                                if (!instruction.result.empty()) {
+                                    values[instruction.result] = result;
+                                    value_types[instruction.result] = instruction.type;
+                                }
+                                break;
+                            }
+                        }
+                        // Invalid ordering falls through to runtime call (fail-closed
+                        // is handled by sema/codegen validation elsewhere).
                     }
 
                     os << "  ";

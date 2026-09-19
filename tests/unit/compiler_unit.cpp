@@ -83,10 +83,12 @@ func main() -> i32:
     }
 
     {
+        // Explicit-shared model: only `shared` lowers to atomics; ordinary
+        // mutable globals accessed concurrently are E0363.
         constexpr std::string_view smp_source = R"(dontneed std
 smp auto
 
-static var counter: u64 = 0
+shared var counter: u64 = 0
 percpu var local_hits: u64 = 0
 
 func helper() -> unit:
@@ -97,7 +99,7 @@ func helper() -> unit:
 func observer() -> u64:
     return counter
 
-concurrent func irq_entry() -> u64:
+public unsafe concurrent func irq_entry() -> u64:
     helper()
     return counter
 )";
@@ -137,7 +139,7 @@ smp manual
 
 static var counter: u64 = 0
 
-concurrent func bump() -> u64:
+public unsafe concurrent func bump() -> u64:
     counter += 1
     return counter
 )";
@@ -147,11 +149,36 @@ concurrent func bump() -> u64:
         Compiler compiler(&manual_diagnostics);
         const auto result =
             compiler.compile_source("smp_manual.ux", std::string(manual_source), options);
-        if (!require(result.success, manual_diagnostics.str()))
+        if (!require(!result.success,
+                     "smp explicit-shared model must reject concurrent "
+                     "access to non-shared mutable global"))
             return 1;
-        if (!require(result.llvm_ir.find("atomicrmw") == std::string::npos &&
-                         result.llvm_ir.find("load atomic") == std::string::npos,
-                     "smp manual must not implicitly strengthen ordinary globals"))
+        if (!require(manual_diagnostics.str().find("E0363") != std::string::npos,
+                     "expected E0363 for implicit concurrent global access"))
+            return 1;
+    }
+
+    {
+        // smp auto no longer promotes implicitly either (same as manual).
+        constexpr std::string_view auto_implicit_source = R"(dontneed std
+smp auto
+
+static var counter: u64 = 0
+
+public unsafe concurrent func bump() -> u64:
+    counter += 1
+    return counter
+)";
+        std::ostringstream auto_diagnostics;
+        CompileOptions auto_options;
+        auto_options.emit = EmitKind::LLVMIR;
+        Compiler auto_compiler(&auto_diagnostics);
+        const auto auto_result = auto_compiler.compile_source(
+            "smp_auto_implicit.ux", std::string(auto_implicit_source), auto_options);
+        if (!require(!auto_result.success, "smp auto must no longer implicitly promote"))
+            return 1;
+        if (!require(auto_diagnostics.str().find("E0363") != std::string::npos,
+                     "expected E0363 for smp auto implicit access"))
             return 1;
     }
 

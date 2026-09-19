@@ -110,9 +110,50 @@ int32_t uinx_utf8_encode(uint32_t codepoint, uint8_t out[4], size_t* out_len);
 uint64_t uinx_atomic_load_u64(const uint64_t* ptr, int32_t order);
 void uinx_atomic_store_u64(uint64_t* ptr, uint64_t value, int32_t order);
 uint64_t uinx_atomic_fetch_add_u64(uint64_t* ptr, uint64_t value, int32_t order);
+uint64_t uinx_atomic_fetch_sub_u64(uint64_t* ptr, uint64_t value, int32_t order);
+uint64_t uinx_atomic_fetch_and_u64(uint64_t* ptr, uint64_t value, int32_t order);
+uint64_t uinx_atomic_fetch_or_u64(uint64_t* ptr, uint64_t value, int32_t order);
+uint64_t uinx_atomic_fetch_xor_u64(uint64_t* ptr, uint64_t value, int32_t order);
+uint64_t uinx_atomic_exchange_u64(uint64_t* ptr, uint64_t value, int32_t order);
 int32_t uinx_atomic_compare_exchange_u64(uint64_t* ptr,
                                          uint64_t* expected,
                                          uint64_t desired,
+                                         int32_t success_order,
+                                         int32_t failure_order);
+uint8_t uinx_atomic_load_u8(const uint8_t* ptr, int32_t order);
+void uinx_atomic_store_u8(uint8_t* ptr, uint8_t value, int32_t order);
+uint8_t uinx_atomic_fetch_add_u8(uint8_t* ptr, uint8_t value, int32_t order);
+uint8_t uinx_atomic_fetch_sub_u8(uint8_t* ptr, uint8_t value, int32_t order);
+uint8_t uinx_atomic_fetch_and_u8(uint8_t* ptr, uint8_t value, int32_t order);
+uint8_t uinx_atomic_fetch_or_u8(uint8_t* ptr, uint8_t value, int32_t order);
+uint8_t uinx_atomic_fetch_xor_u8(uint8_t* ptr, uint8_t value, int32_t order);
+uint8_t uinx_atomic_exchange_u8(uint8_t* ptr, uint8_t value, int32_t order);
+int32_t uinx_atomic_compare_exchange_u8(
+    uint8_t* ptr, uint8_t* expected, uint8_t desired, int32_t success_order, int32_t failure_order);
+uint16_t uinx_atomic_load_u16(const uint16_t* ptr, int32_t order);
+void uinx_atomic_store_u16(uint16_t* ptr, uint16_t value, int32_t order);
+uint16_t uinx_atomic_fetch_add_u16(uint16_t* ptr, uint16_t value, int32_t order);
+uint16_t uinx_atomic_fetch_sub_u16(uint16_t* ptr, uint16_t value, int32_t order);
+uint16_t uinx_atomic_fetch_and_u16(uint16_t* ptr, uint16_t value, int32_t order);
+uint16_t uinx_atomic_fetch_or_u16(uint16_t* ptr, uint16_t value, int32_t order);
+uint16_t uinx_atomic_fetch_xor_u16(uint16_t* ptr, uint16_t value, int32_t order);
+uint16_t uinx_atomic_exchange_u16(uint16_t* ptr, uint16_t value, int32_t order);
+int32_t uinx_atomic_compare_exchange_u16(uint16_t* ptr,
+                                         uint16_t* expected,
+                                         uint16_t desired,
+                                         int32_t success_order,
+                                         int32_t failure_order);
+uint32_t uinx_atomic_load_u32(const uint32_t* ptr, int32_t order);
+void uinx_atomic_store_u32(uint32_t* ptr, uint32_t value, int32_t order);
+uint32_t uinx_atomic_fetch_add_u32(uint32_t* ptr, uint32_t value, int32_t order);
+uint32_t uinx_atomic_fetch_sub_u32(uint32_t* ptr, uint32_t value, int32_t order);
+uint32_t uinx_atomic_fetch_and_u32(uint32_t* ptr, uint32_t value, int32_t order);
+uint32_t uinx_atomic_fetch_or_u32(uint32_t* ptr, uint32_t value, int32_t order);
+uint32_t uinx_atomic_fetch_xor_u32(uint32_t* ptr, uint32_t value, int32_t order);
+uint32_t uinx_atomic_exchange_u32(uint32_t* ptr, uint32_t value, int32_t order);
+int32_t uinx_atomic_compare_exchange_u32(uint32_t* ptr,
+                                         uint32_t* expected,
+                                         uint32_t desired,
                                          int32_t success_order,
                                          int32_t failure_order);
 

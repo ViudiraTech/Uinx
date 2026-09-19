@@ -99,11 +99,11 @@ The recognized volatile ABI calls lower directly to LLVM volatile loads/stores.
 
 ### Atomics
 
-`core::atomic` provides `AtomicU64` with load/store/fetch-add/compare-exchange operations. Recognized atomic ABI calls lower directly to LLVM atomics.
+`core::atomic` provides `AtomicU8/U16/U32/U64/Bool` with load/store/swap/fetch-add/sub/and/or/xor/compare-exchange and C++20 ordering validation. Recognized `uinx_atomic_*` ABI calls lower directly to LLVM atomics.
 
 ### Locks
 
-`core::sync` provides `SpinLock` as a freestanding primitive. A production kernel may wrap it with interrupt/preemption rules, lock debugging, lock ranking, scheduler integration, or architecture pause hints.
+`core::sync` provides freestanding `SpinLock`, fair `TicketSpinLock`, `RwSpinLock`, `SeqLock`, `Once`, and `Barrier`. A production kernel may wrap them with interrupt/preemption rules, lock debugging, lock ranking, scheduler integration, or architecture pause hints.
 
 ## Raw pointers
 

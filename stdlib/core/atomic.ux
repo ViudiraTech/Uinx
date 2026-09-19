@@ -2,49 +2,313 @@
 # Copyright (c) 2026 ViudiraTech
 # By JiTianYu391
 
-# Uinx core::atomic
-# The uinx_atomic_* ABI is compiler-intrinsic when the ordering argument is a
-# compile-time constant. Hosted builds may still provide runtime fallbacks.
+# Uinx core::atomic — industrial full family (Rust + C++20 + LKMM fusion)
+# Ordering encoding (matches LLVM + runtime): 0 relaxed/monotonic, 1 acquire,
+# 2 release, 3 acq_rel, 4 seq_cst. The uinx_atomic_* ABI is compiler-intrinsic
+# when the ordering argument is a compile-time constant; hosted builds keep
+# C11 runtime fallbacks in runtime/sync.c.
 dontneed std
 
-public struct AtomicU64:
-    shared value: u64
+# ---- raw intrinsics: 8/16/32/64 + bool-as-u8 ----
+unsafe extern "C" func uinx_atomic_load_u8(ptr: ptr u8, order: i32) -> u8
+unsafe extern "C" func uinx_atomic_store_u8(ptr: mutptr u8, value: u8, order: i32) -> unit
+unsafe extern "C" func uinx_atomic_fetch_add_u8(ptr: mutptr u8, value: u8, order: i32) -> u8
+unsafe extern "C" func uinx_atomic_fetch_sub_u8(ptr: mutptr u8, value: u8, order: i32) -> u8
+unsafe extern "C" func uinx_atomic_fetch_and_u8(ptr: mutptr u8, value: u8, order: i32) -> u8
+unsafe extern "C" func uinx_atomic_fetch_or_u8(ptr: mutptr u8, value: u8, order: i32) -> u8
+unsafe extern "C" func uinx_atomic_fetch_xor_u8(ptr: mutptr u8, value: u8, order: i32) -> u8
+unsafe extern "C" func uinx_atomic_exchange_u8(ptr: mutptr u8, value: u8, order: i32) -> u8
+unsafe extern "C" func uinx_atomic_compare_exchange_u8(ptr: mutptr u8, expected: mutptr u8, desired: u8, success_order: i32, failure_order: i32) -> i32
+
+unsafe extern "C" func uinx_atomic_load_u16(ptr: ptr u16, order: i32) -> u16
+unsafe extern "C" func uinx_atomic_store_u16(ptr: mutptr u16, value: u16, order: i32) -> unit
+unsafe extern "C" func uinx_atomic_fetch_add_u16(ptr: mutptr u16, value: u16, order: i32) -> u16
+unsafe extern "C" func uinx_atomic_fetch_sub_u16(ptr: mutptr u16, value: u16, order: i32) -> u16
+unsafe extern "C" func uinx_atomic_fetch_and_u16(ptr: mutptr u16, value: u16, order: i32) -> u16
+unsafe extern "C" func uinx_atomic_fetch_or_u16(ptr: mutptr u16, value: u16, order: i32) -> u16
+unsafe extern "C" func uinx_atomic_fetch_xor_u16(ptr: mutptr u16, value: u16, order: i32) -> u16
+unsafe extern "C" func uinx_atomic_exchange_u16(ptr: mutptr u16, value: u16, order: i32) -> u16
+unsafe extern "C" func uinx_atomic_compare_exchange_u16(ptr: mutptr u16, expected: mutptr u16, desired: u16, success_order: i32, failure_order: i32) -> i32
+
+unsafe extern "C" func uinx_atomic_load_u32(ptr: ptr u32, order: i32) -> u32
+unsafe extern "C" func uinx_atomic_store_u32(ptr: mutptr u32, value: u32, order: i32) -> unit
+unsafe extern "C" func uinx_atomic_fetch_add_u32(ptr: mutptr u32, value: u32, order: i32) -> u32
+unsafe extern "C" func uinx_atomic_fetch_sub_u32(ptr: mutptr u32, value: u32, order: i32) -> u32
+unsafe extern "C" func uinx_atomic_fetch_and_u32(ptr: mutptr u32, value: u32, order: i32) -> u32
+unsafe extern "C" func uinx_atomic_fetch_or_u32(ptr: mutptr u32, value: u32, order: i32) -> u32
+unsafe extern "C" func uinx_atomic_fetch_xor_u32(ptr: mutptr u32, value: u32, order: i32) -> u32
+unsafe extern "C" func uinx_atomic_exchange_u32(ptr: mutptr u32, value: u32, order: i32) -> u32
+unsafe extern "C" func uinx_atomic_compare_exchange_u32(ptr: mutptr u32, expected: mutptr u32, desired: u32, success_order: i32, failure_order: i32) -> i32
 
 unsafe extern "C" func uinx_atomic_load_u64(ptr: ptr u64, order: i32) -> u64
 unsafe extern "C" func uinx_atomic_store_u64(ptr: mutptr u64, value: u64, order: i32) -> unit
 unsafe extern "C" func uinx_atomic_fetch_add_u64(ptr: mutptr u64, value: u64, order: i32) -> u64
+unsafe extern "C" func uinx_atomic_fetch_sub_u64(ptr: mutptr u64, value: u64, order: i32) -> u64
+unsafe extern "C" func uinx_atomic_fetch_and_u64(ptr: mutptr u64, value: u64, order: i32) -> u64
+unsafe extern "C" func uinx_atomic_fetch_or_u64(ptr: mutptr u64, value: u64, order: i32) -> u64
+unsafe extern "C" func uinx_atomic_fetch_xor_u64(ptr: mutptr u64, value: u64, order: i32) -> u64
+unsafe extern "C" func uinx_atomic_exchange_u64(ptr: mutptr u64, value: u64, order: i32) -> u64
 unsafe extern "C" func uinx_atomic_compare_exchange_u64(ptr: mutptr u64, expected: mutptr u64, desired: u64, success_order: i32, failure_order: i32) -> i32
+
+# ---- AtomicU8 ----
+public struct AtomicU8:
+    shared value: u8
+
+extend AtomicU8:
+    public func load(self: ref Self) -> u8:
+        unsafe:
+            return uinx_atomic_load_u8((borrow self.value) as ptr u8, 1)
+    public func load_relaxed(self: ref Self) -> u8:
+        unsafe:
+            return uinx_atomic_load_u8((borrow self.value) as ptr u8, 0)
+    public func load_acquire(self: ref Self) -> u8:
+        unsafe:
+            return uinx_atomic_load_u8((borrow self.value) as ptr u8, 1)
+    public func store(self: mutref Self, value: u8) -> unit:
+        unsafe:
+            uinx_atomic_store_u8((borrow mut self.value) as mutptr u8, value, 2)
+        return
+    public func store_relaxed(self: mutref Self, value: u8) -> unit:
+        unsafe:
+            uinx_atomic_store_u8((borrow mut self.value) as mutptr u8, value, 0)
+        return
+    public func store_release(self: mutref Self, value: u8) -> unit:
+        unsafe:
+            uinx_atomic_store_u8((borrow mut self.value) as mutptr u8, value, 2)
+        return
+    public func swap(self: mutref Self, value: u8) -> u8:
+        unsafe:
+            return uinx_atomic_exchange_u8((borrow mut self.value) as mutptr u8, value, 3)
+    public func fetch_add(self: mutref Self, value: u8) -> u8:
+        unsafe:
+            return uinx_atomic_fetch_add_u8((borrow mut self.value) as mutptr u8, value, 3)
+    public func fetch_add_relaxed(self: mutref Self, value: u8) -> u8:
+        unsafe:
+            return uinx_atomic_fetch_add_u8((borrow mut self.value) as mutptr u8, value, 0)
+    public func fetch_sub(self: mutref Self, value: u8) -> u8:
+        unsafe:
+            return uinx_atomic_fetch_sub_u8((borrow mut self.value) as mutptr u8, value, 3)
+    public func fetch_and(self: mutref Self, value: u8) -> u8:
+        unsafe:
+            return uinx_atomic_fetch_and_u8((borrow mut self.value) as mutptr u8, value, 3)
+    public func fetch_or(self: mutref Self, value: u8) -> u8:
+        unsafe:
+            return uinx_atomic_fetch_or_u8((borrow mut self.value) as mutptr u8, value, 3)
+    public func fetch_xor(self: mutref Self, value: u8) -> u8:
+        unsafe:
+            return uinx_atomic_fetch_xor_u8((borrow mut self.value) as mutptr u8, value, 3)
+    public func compare_exchange(self: mutref Self, expected: mutref u8, desired: u8) -> bool:
+        unsafe:
+            val result = uinx_atomic_compare_exchange_u8((borrow mut self.value) as mutptr u8, expected as mutptr u8, desired, 4, 1)
+            return result != 0
+    public func compare_exchange_weak(self: mutref Self, expected: mutref u8, desired: u8) -> bool:
+        unsafe:
+            val result = uinx_atomic_compare_exchange_u8((borrow mut self.value) as mutptr u8, expected as mutptr u8, desired, 3, 1)
+            return result != 0
+
+# ---- AtomicU16 ----
+public struct AtomicU16:
+    shared value: u16
+
+extend AtomicU16:
+    public func load(self: ref Self) -> u16:
+        unsafe:
+            return uinx_atomic_load_u16((borrow self.value) as ptr u16, 1)
+    public func load_relaxed(self: ref Self) -> u16:
+        unsafe:
+            return uinx_atomic_load_u16((borrow self.value) as ptr u16, 0)
+    public func load_acquire(self: ref Self) -> u16:
+        unsafe:
+            return uinx_atomic_load_u16((borrow self.value) as ptr u16, 1)
+    public func store(self: mutref Self, value: u16) -> unit:
+        unsafe:
+            uinx_atomic_store_u16((borrow mut self.value) as mutptr u16, value, 2)
+        return
+    public func store_relaxed(self: mutref Self, value: u16) -> unit:
+        unsafe:
+            uinx_atomic_store_u16((borrow mut self.value) as mutptr u16, value, 0)
+        return
+    public func store_release(self: mutref Self, value: u16) -> unit:
+        unsafe:
+            uinx_atomic_store_u16((borrow mut self.value) as mutptr u16, value, 2)
+        return
+    public func swap(self: mutref Self, value: u16) -> u16:
+        unsafe:
+            return uinx_atomic_exchange_u16((borrow mut self.value) as mutptr u16, value, 3)
+    public func fetch_add(self: mutref Self, value: u16) -> u16:
+        unsafe:
+            return uinx_atomic_fetch_add_u16((borrow mut self.value) as mutptr u16, value, 3)
+    public func fetch_add_relaxed(self: mutref Self, value: u16) -> u16:
+        unsafe:
+            return uinx_atomic_fetch_add_u16((borrow mut self.value) as mutptr u16, value, 0)
+    public func fetch_sub(self: mutref Self, value: u16) -> u16:
+        unsafe:
+            return uinx_atomic_fetch_sub_u16((borrow mut self.value) as mutptr u16, value, 3)
+    public func fetch_and(self: mutref Self, value: u16) -> u16:
+        unsafe:
+            return uinx_atomic_fetch_and_u16((borrow mut self.value) as mutptr u16, value, 3)
+    public func fetch_or(self: mutref Self, value: u16) -> u16:
+        unsafe:
+            return uinx_atomic_fetch_or_u16((borrow mut self.value) as mutptr u16, value, 3)
+    public func fetch_xor(self: mutref Self, value: u16) -> u16:
+        unsafe:
+            return uinx_atomic_fetch_xor_u16((borrow mut self.value) as mutptr u16, value, 3)
+    public func compare_exchange(self: mutref Self, expected: mutref u16, desired: u16) -> bool:
+        unsafe:
+            val result = uinx_atomic_compare_exchange_u16((borrow mut self.value) as mutptr u16, expected as mutptr u16, desired, 4, 1)
+            return result != 0
+    public func compare_exchange_weak(self: mutref Self, expected: mutref u16, desired: u16) -> bool:
+        unsafe:
+            val result = uinx_atomic_compare_exchange_u16((borrow mut self.value) as mutptr u16, expected as mutptr u16, desired, 3, 1)
+            return result != 0
+
+# ---- AtomicU32 ----
+public struct AtomicU32:
+    shared value: u32
+
+extend AtomicU32:
+    public func load(self: ref Self) -> u32:
+        unsafe:
+            return uinx_atomic_load_u32((borrow self.value) as ptr u32, 1)
+    public func load_relaxed(self: ref Self) -> u32:
+        unsafe:
+            return uinx_atomic_load_u32((borrow self.value) as ptr u32, 0)
+    public func load_acquire(self: ref Self) -> u32:
+        unsafe:
+            return uinx_atomic_load_u32((borrow self.value) as ptr u32, 1)
+    public func store(self: mutref Self, value: u32) -> unit:
+        unsafe:
+            uinx_atomic_store_u32((borrow mut self.value) as mutptr u32, value, 2)
+        return
+    public func store_relaxed(self: mutref Self, value: u32) -> unit:
+        unsafe:
+            uinx_atomic_store_u32((borrow mut self.value) as mutptr u32, value, 0)
+        return
+    public func store_release(self: mutref Self, value: u32) -> unit:
+        unsafe:
+            uinx_atomic_store_u32((borrow mut self.value) as mutptr u32, value, 2)
+        return
+    public func swap(self: mutref Self, value: u32) -> u32:
+        unsafe:
+            return uinx_atomic_exchange_u32((borrow mut self.value) as mutptr u32, value, 3)
+    public func fetch_add(self: mutref Self, value: u32) -> u32:
+        unsafe:
+            return uinx_atomic_fetch_add_u32((borrow mut self.value) as mutptr u32, value, 3)
+    public func fetch_add_relaxed(self: mutref Self, value: u32) -> u32:
+        unsafe:
+            return uinx_atomic_fetch_add_u32((borrow mut self.value) as mutptr u32, value, 0)
+    public func fetch_sub(self: mutref Self, value: u32) -> u32:
+        unsafe:
+            return uinx_atomic_fetch_sub_u32((borrow mut self.value) as mutptr u32, value, 3)
+    public func fetch_and(self: mutref Self, value: u32) -> u32:
+        unsafe:
+            return uinx_atomic_fetch_and_u32((borrow mut self.value) as mutptr u32, value, 3)
+    public func fetch_or(self: mutref Self, value: u32) -> u32:
+        unsafe:
+            return uinx_atomic_fetch_or_u32((borrow mut self.value) as mutptr u32, value, 3)
+    public func fetch_xor(self: mutref Self, value: u32) -> u32:
+        unsafe:
+            return uinx_atomic_fetch_xor_u32((borrow mut self.value) as mutptr u32, value, 3)
+    public func compare_exchange(self: mutref Self, expected: mutref u32, desired: u32) -> bool:
+        unsafe:
+            val result = uinx_atomic_compare_exchange_u32((borrow mut self.value) as mutptr u32, expected as mutptr u32, desired, 4, 1)
+            return result != 0
+    public func compare_exchange_weak(self: mutref Self, expected: mutref u32, desired: u32) -> bool:
+        unsafe:
+            val result = uinx_atomic_compare_exchange_u32((borrow mut self.value) as mutptr u32, expected as mutptr u32, desired, 3, 1)
+            return result != 0
+
+# ---- AtomicU64 (full API, backward compatible) ----
+public struct AtomicU64:
+    shared value: u64
 
 extend AtomicU64:
     public func load(self: ref Self) -> u64:
         unsafe:
             return uinx_atomic_load_u64((borrow self.value) as ptr u64, 1)
-
     public func load_relaxed(self: ref Self) -> u64:
         unsafe:
             return uinx_atomic_load_u64((borrow self.value) as ptr u64, 0)
-
+    public func load_acquire(self: ref Self) -> u64:
+        unsafe:
+            return uinx_atomic_load_u64((borrow self.value) as ptr u64, 1)
     public func store(self: mutref Self, value: u64) -> unit:
         unsafe:
             uinx_atomic_store_u64((borrow mut self.value) as mutptr u64, value, 2)
         return
-
     public func store_relaxed(self: mutref Self, value: u64) -> unit:
         unsafe:
             uinx_atomic_store_u64((borrow mut self.value) as mutptr u64, value, 0)
         return
-
+    public func store_release(self: mutref Self, value: u64) -> unit:
+        unsafe:
+            uinx_atomic_store_u64((borrow mut self.value) as mutptr u64, value, 2)
+        return
+    public func swap(self: mutref Self, value: u64) -> u64:
+        unsafe:
+            return uinx_atomic_exchange_u64((borrow mut self.value) as mutptr u64, value, 3)
     public func fetch_add(self: mutref Self, value: u64) -> u64:
         unsafe:
             return uinx_atomic_fetch_add_u64((borrow mut self.value) as mutptr u64, value, 3)
-
+    public func fetch_add_relaxed(self: mutref Self, value: u64) -> u64:
+        unsafe:
+            return uinx_atomic_fetch_add_u64((borrow mut self.value) as mutptr u64, value, 0)
+    public func fetch_sub(self: mutref Self, value: u64) -> u64:
+        unsafe:
+            return uinx_atomic_fetch_sub_u64((borrow mut self.value) as mutptr u64, value, 3)
+    public func fetch_and(self: mutref Self, value: u64) -> u64:
+        unsafe:
+            return uinx_atomic_fetch_and_u64((borrow mut self.value) as mutptr u64, value, 3)
+    public func fetch_or(self: mutref Self, value: u64) -> u64:
+        unsafe:
+            return uinx_atomic_fetch_or_u64((borrow mut self.value) as mutptr u64, value, 3)
+    public func fetch_xor(self: mutref Self, value: u64) -> u64:
+        unsafe:
+            return uinx_atomic_fetch_xor_u64((borrow mut self.value) as mutptr u64, value, 3)
     public func compare_exchange(self: mutref Self, expected: mutref u64, desired: u64) -> bool:
         unsafe:
-            val result = uinx_atomic_compare_exchange_u64(
-                (borrow mut self.value) as mutptr u64,
-                expected as mutptr u64,
-                desired,
-                4,
-                1,
-            )
+            val result = uinx_atomic_compare_exchange_u64((borrow mut self.value) as mutptr u64, expected as mutptr u64, desired, 4, 1)
             return result != 0
+    public func compare_exchange_weak(self: mutref Self, expected: mutref u64, desired: u64) -> bool:
+        unsafe:
+            val result = uinx_atomic_compare_exchange_u64((borrow mut self.value) as mutptr u64, expected as mutptr u64, desired, 3, 1)
+            return result != 0
+
+# ---- AtomicBool (0/1 over u8 storage; LLVM i1 is not byte-sized) ----
+public struct AtomicBool:
+    shared value: u8
+
+extend AtomicBool:
+    public func load(self: ref Self) -> bool:
+        unsafe:
+            val raw = uinx_atomic_load_u8((borrow self.value) as ptr u8, 1)
+            return raw != 0
+    public func load_relaxed(self: ref Self) -> bool:
+        unsafe:
+            val raw = uinx_atomic_load_u8((borrow self.value) as ptr u8, 0)
+            return raw != 0
+    public func store(self: mutref Self, value: bool) -> unit:
+        unsafe:
+            var raw: u8 = 0
+            if value:
+                raw = 1
+            uinx_atomic_store_u8((borrow mut self.value) as mutptr u8, raw, 2)
+        return
+    public func store_relaxed(self: mutref Self, value: bool) -> unit:
+        unsafe:
+            var raw: u8 = 0
+            if value:
+                raw = 1
+            uinx_atomic_store_u8((borrow mut self.value) as mutptr u8, raw, 0)
+        return
+    public func swap(self: mutref Self, value: bool) -> bool:
+        unsafe:
+            var raw: u8 = 0
+            if value:
+                raw = 1
+            val prev = uinx_atomic_exchange_u8((borrow mut self.value) as mutptr u8, raw, 3)
+            return prev != 0
+    public func compare_exchange(self: mutref Self, expected: mutref u8, desired: u8) -> bool:
+        unsafe:
+            val ok = uinx_atomic_compare_exchange_u8((borrow mut self.value) as mutptr u8, expected as mutptr u8, desired, 4, 1)
+            return ok != 0
