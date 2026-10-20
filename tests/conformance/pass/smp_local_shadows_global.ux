@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# TEST: conformance.positive.smp-local-shadows-global
+# EXPECT: compile-pass
+# A local or parameter named like a mutable global is not a global access.
+
+dontneed std
+smp auto
+
+static var counter: u64 = 0
+public unsafe concurrent func f() -> u64:
+    var counter: u64 = 1
+    counter += 1
+    return counter
+
+public unsafe concurrent func g(counter: u64) -> u64:
+    return counter + 1

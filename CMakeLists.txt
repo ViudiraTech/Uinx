@@ -50,6 +50,9 @@ add_library(uinx_compiler
   src/borrow_liveness.cpp
   src/borrow_flow.cpp
   src/mir.cpp
+  src/mir_stmt.cpp
+  src/mir_expr.cpp
+  src/mir_optimizer.cpp
   src/codegen.cpp
   src/codegen_asm.cpp
   src/codegen_async.cpp

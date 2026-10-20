@@ -47,111 +47,28 @@ void TypeChecker::validate_concurrency_boundaries() {
 void TypeChecker::propagate_concurrency(ast::SmpMode mode) {
     std::unordered_map<std::string, std::unordered_set<std::string>> edges;
 
-    std::function<void(const ast::Expr&, std::unordered_set<std::string>&)> visit_expr;
-    std::function<void(const ast::Stmt&, std::unordered_set<std::string>&)> visit_stmt;
-    visit_expr = [&](const ast::Expr& expr, std::unordered_set<std::string>& out) {
-        switch (expr.kind) {
-            case ast::ExprKind::Unary:
-                visit_expr(*static_cast<const ast::UnaryExpr&>(expr).operand, out);
-                break;
-            case ast::ExprKind::Binary: {
-                const auto& b = static_cast<const ast::BinaryExpr&>(expr);
-                visit_expr(*b.lhs, out);
-                visit_expr(*b.rhs, out);
-                break;
-            }
-            case ast::ExprKind::Borrow:
-                visit_expr(*static_cast<const ast::BorrowExpr&>(expr).target, out);
-                break;
-            case ast::ExprKind::Call: {
-                const auto& call = static_cast<const ast::CallExpr&>(expr);
-                if (call.callee->kind == ast::ExprKind::Name) {
-                    const auto& name = static_cast<const ast::NameExpr&>(*call.callee).name;
-                    if (model_.functions.contains(name))
-                        out.insert(name);
-                } else if (call.callee->kind == ast::ExprKind::Member) {
-                    const auto& member = static_cast<const ast::MemberExpr&>(*call.callee);
-                    auto type_it = model_.expr_types.find(member.base.get());
-                    if (type_it != model_.expr_types.end()) {
-                        Type owner = type_it->second;
-                        if (owner.kind == TypeKind::Ref && owner.pointee)
-                            owner = *owner.pointee;
-                        const std::string key = owner.name + "::" + member.member;
-                        if (model_.functions.contains(key))
-                            out.insert(key);
-                    }
-                    visit_expr(*member.base, out);
+    std::function<void(const ast::Expr&, std::unordered_set<std::string>&)> collect_callees;
+    collect_callees = [&](const ast::Expr& expr, std::unordered_set<std::string>& out) {
+        if (expr.kind == ast::ExprKind::Call) {
+            const auto& call = static_cast<const ast::CallExpr&>(expr);
+            if (call.callee->kind == ast::ExprKind::Name) {
+                const auto& name = static_cast<const ast::NameExpr&>(*call.callee).name;
+                if (model_.functions.contains(name))
+                    out.insert(name);
+            } else if (call.callee->kind == ast::ExprKind::Member) {
+                const auto& member = static_cast<const ast::MemberExpr&>(*call.callee);
+                auto type_it = model_.expr_types.find(member.base.get());
+                if (type_it != model_.expr_types.end()) {
+                    Type owner = type_it->second;
+                    if (owner.kind == TypeKind::Ref && owner.pointee)
+                        owner = *owner.pointee;
+                    const std::string key = owner.name + "::" + member.member;
+                    if (model_.functions.contains(key))
+                        out.insert(key);
                 }
-                for (const auto& arg : call.args)
-                    visit_expr(*arg, out);
-                break;
             }
-            case ast::ExprKind::Member:
-                visit_expr(*static_cast<const ast::MemberExpr&>(expr).base, out);
-                break;
-            case ast::ExprKind::Index: {
-                const auto& i = static_cast<const ast::IndexExpr&>(expr);
-                visit_expr(*i.base, out);
-                visit_expr(*i.index, out);
-                break;
-            }
-            case ast::ExprKind::Await:
-                visit_expr(*static_cast<const ast::AwaitExpr&>(expr).value, out);
-                break;
-            case ast::ExprKind::Cast:
-                visit_expr(*static_cast<const ast::CastExpr&>(expr).value, out);
-                break;
-            case ast::ExprKind::StructLiteral:
-                for (const auto& field : static_cast<const ast::StructLiteralExpr&>(expr).fields)
-                    visit_expr(*field.value, out);
-                break;
-            case ast::ExprKind::Asm:
-                for (const auto& operand : static_cast<const ast::AsmExpr&>(expr).operands)
-                    if (operand.value)
-                        visit_expr(*operand.value, out);
-                break;
-            default:
-                break;
         }
-    };
-    visit_stmt = [&](const ast::Stmt& stmt, std::unordered_set<std::string>& out) {
-        if (const auto* let_stmt = dynamic_cast<const ast::LetStmt*>(&stmt)) {
-            if (let_stmt->init)
-                visit_expr(*let_stmt->init, out);
-        } else if (const auto* assign_stmt = dynamic_cast<const ast::AssignStmt*>(&stmt)) {
-            visit_expr(*assign_stmt->target, out);
-            visit_expr(*assign_stmt->value, out);
-        } else if (const auto* expr_stmt = dynamic_cast<const ast::ExprStmt*>(&stmt))
-            visit_expr(*expr_stmt->expr, out);
-        else if (const auto* return_stmt = dynamic_cast<const ast::ReturnStmt*>(&stmt)) {
-            if (return_stmt->value)
-                visit_expr(*return_stmt->value, out);
-        } else if (const auto* if_stmt = dynamic_cast<const ast::IfStmt*>(&stmt)) {
-            visit_expr(*if_stmt->condition, out);
-            for (const auto& child : if_stmt->then_block->stmts)
-                visit_stmt(*child, out);
-            if (if_stmt->else_block)
-                for (const auto& child : if_stmt->else_block->stmts)
-                    visit_stmt(*child, out);
-        } else if (const auto* while_stmt = dynamic_cast<const ast::WhileStmt*>(&stmt)) {
-            visit_expr(*while_stmt->condition, out);
-            for (const auto& child : while_stmt->body->stmts)
-                visit_stmt(*child, out);
-        } else if (const auto* for_stmt = dynamic_cast<const ast::ForStmt*>(&stmt)) {
-            visit_expr(*for_stmt->begin, out);
-            visit_expr(*for_stmt->end, out);
-            for (const auto& child : for_stmt->body->stmts)
-                visit_stmt(*child, out);
-        } else if (const auto* loop_stmt = dynamic_cast<const ast::LoopStmt*>(&stmt)) {
-            for (const auto& child : loop_stmt->body->stmts)
-                visit_stmt(*child, out);
-        } else if (const auto* block_stmt = dynamic_cast<const ast::BlockStmt*>(&stmt)) {
-            for (const auto& child : block_stmt->stmts)
-                visit_stmt(*child, out);
-        } else if (const auto* unsafe_stmt = dynamic_cast<const ast::UnsafeStmt*>(&stmt)) {
-            for (const auto& child : unsafe_stmt->body->stmts)
-                visit_stmt(*child, out);
-        }
+        for_each_child_expr(expr, [&](const ast::Expr& child) { collect_callees(child, out); });
     };
 
     for (const auto& [key, sig] : model_.functions) {
@@ -159,7 +76,7 @@ void TypeChecker::propagate_concurrency(ast::SmpMode mode) {
             continue;
         auto& callees = edges[key];
         for (const auto& stmt : sig.decl->body->stmts)
-            visit_stmt(*stmt, callees);
+            walk_stmt_exprs(*stmt, [&](const ast::Expr& expr) { collect_callees(expr, callees); });
     }
 
     std::vector<std::string> work;
@@ -198,11 +115,22 @@ void TypeChecker::propagate_concurrency(ast::SmpMode mode) {
         return type.is_integer() || type.kind == TypeKind::RawPtr;
     };
 
+    // A local or parameter that shadows a global is not a global access.
+    const auto is_local = [&](const ast::Expr& name_expr) {
+        const auto resolved = model_.hir.expr_resolution.find(&name_expr);
+        if (resolved == model_.hir.expr_resolution.end() ||
+            resolved->second >= model_.hir.symbols.size())
+            return false;
+        const auto kind = model_.hir.symbols[resolved->second].kind;
+        return kind == hir::SymbolKind::Local || kind == hir::SymbolKind::Parameter;
+    };
+
     std::unordered_set<std::string> reported;
     std::function<void(const ast::Expr&)> check_expr;
-    std::function<void(const ast::Stmt&)> check_stmt;
     check_expr = [&](const ast::Expr& expr) {
         if (expr.kind == ast::ExprKind::Name) {
+            if (is_local(expr))
+                return;
             const auto& name = static_cast<const ast::NameExpr&>(expr).name;
             auto global = model_.globals.find(name);
             if (global != model_.globals.end() && global->second.is_mut &&
@@ -231,7 +159,7 @@ void TypeChecker::propagate_concurrency(ast::SmpMode mode) {
         }
         if (expr.kind == ast::ExprKind::Member) {
             const auto& member = static_cast<const ast::MemberExpr&>(expr);
-            if (member.base->kind == ast::ExprKind::Name) {
+            if (member.base->kind == ast::ExprKind::Name && !is_local(*member.base)) {
                 const auto& base_name = static_cast<const ast::NameExpr&>(*member.base).name;
                 auto global = model_.globals.find(base_name);
                 if (global != model_.globals.end() && global->second.is_mut &&
@@ -276,97 +204,14 @@ void TypeChecker::propagate_concurrency(ast::SmpMode mode) {
             check_expr(*member.base);
             return;
         }
-        switch (expr.kind) {
-            case ast::ExprKind::Unary:
-                check_expr(*static_cast<const ast::UnaryExpr&>(expr).operand);
-                break;
-            case ast::ExprKind::Binary: {
-                const auto& binary = static_cast<const ast::BinaryExpr&>(expr);
-                check_expr(*binary.lhs);
-                check_expr(*binary.rhs);
-                break;
-            }
-            case ast::ExprKind::Borrow:
-                check_expr(*static_cast<const ast::BorrowExpr&>(expr).target);
-                break;
-            case ast::ExprKind::Call: {
-                const auto& call = static_cast<const ast::CallExpr&>(expr);
-                if (call.callee->kind == ast::ExprKind::Member)
-                    check_expr(*static_cast<const ast::MemberExpr&>(*call.callee).base);
-                for (const auto& arg : call.args)
-                    check_expr(*arg);
-                break;
-            }
-            case ast::ExprKind::Index: {
-                const auto& index = static_cast<const ast::IndexExpr&>(expr);
-                check_expr(*index.base);
-                check_expr(*index.index);
-                break;
-            }
-            case ast::ExprKind::Await:
-                check_expr(*static_cast<const ast::AwaitExpr&>(expr).value);
-                break;
-            case ast::ExprKind::Cast:
-                check_expr(*static_cast<const ast::CastExpr&>(expr).value);
-                break;
-            case ast::ExprKind::StructLiteral:
-                for (const auto& field : static_cast<const ast::StructLiteralExpr&>(expr).fields)
-                    check_expr(*field.value);
-                break;
-            case ast::ExprKind::Asm:
-                for (const auto& operand : static_cast<const ast::AsmExpr&>(expr).operands)
-                    if (operand.value)
-                        check_expr(*operand.value);
-                break;
-            default:
-                break;
-        }
-    };
-    check_stmt = [&](const ast::Stmt& stmt) {
-        if (const auto* let_stmt = dynamic_cast<const ast::LetStmt*>(&stmt)) {
-            if (let_stmt->init)
-                check_expr(*let_stmt->init);
-        } else if (const auto* assign_stmt = dynamic_cast<const ast::AssignStmt*>(&stmt)) {
-            check_expr(*assign_stmt->target);
-            check_expr(*assign_stmt->value);
-        } else if (const auto* expr_stmt = dynamic_cast<const ast::ExprStmt*>(&stmt))
-            check_expr(*expr_stmt->expr);
-        else if (const auto* return_stmt = dynamic_cast<const ast::ReturnStmt*>(&stmt)) {
-            if (return_stmt->value)
-                check_expr(*return_stmt->value);
-        } else if (const auto* if_stmt = dynamic_cast<const ast::IfStmt*>(&stmt)) {
-            check_expr(*if_stmt->condition);
-            for (const auto& child : if_stmt->then_block->stmts)
-                check_stmt(*child);
-            if (if_stmt->else_block)
-                for (const auto& child : if_stmt->else_block->stmts)
-                    check_stmt(*child);
-        } else if (const auto* while_stmt = dynamic_cast<const ast::WhileStmt*>(&stmt)) {
-            check_expr(*while_stmt->condition);
-            for (const auto& child : while_stmt->body->stmts)
-                check_stmt(*child);
-        } else if (const auto* for_stmt = dynamic_cast<const ast::ForStmt*>(&stmt)) {
-            check_expr(*for_stmt->begin);
-            check_expr(*for_stmt->end);
-            for (const auto& child : for_stmt->body->stmts)
-                check_stmt(*child);
-        } else if (const auto* loop_stmt = dynamic_cast<const ast::LoopStmt*>(&stmt)) {
-            for (const auto& child : loop_stmt->body->stmts)
-                check_stmt(*child);
-        } else if (const auto* block_stmt = dynamic_cast<const ast::BlockStmt*>(&stmt)) {
-            for (const auto& child : block_stmt->stmts)
-                check_stmt(*child);
-        } else if (const auto* unsafe_stmt = dynamic_cast<const ast::UnsafeStmt*>(&stmt)) {
-            for (const auto& child : unsafe_stmt->body->stmts)
-                check_stmt(*child);
-        }
+        for_each_child_expr(expr, check_expr);
     };
 
     for (const auto& [key, signature] : model_.functions) {
         if (!signature.is_concurrent || !signature.decl || !signature.decl->body)
             continue;
         for (const auto& statement : signature.decl->body->stmts)
-            check_stmt(*statement);
+            walk_stmt_exprs(*statement, check_expr);
     }
 }
 } // namespace uinx
