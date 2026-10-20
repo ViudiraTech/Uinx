@@ -4,6 +4,9 @@
 
 **Copyright © 2026 ViudiraTech · Code by JiTianYu391**
 
+- Borrow checker: implicit reborrow when a `mutref` is passed to a `mutref` parameter, explicit `borrow [mut] deref r` reborrows (including nested and through reference parameters), and checking of writes through references (`deref r = v`) against live loans and moves. `consume(first); consume(first)` on a `mutref` is now accepted, as in Rust; `val second = first` still moves.
+- Split `borrow.cpp`, `sema.cpp`, `codegen.cpp` and `mir.cpp` into focused translation units (no behavior change; LLVM IR for all examples and tests is byte-identical).
+- SMP check: a local or parameter that shadows a mutable global is no longer reported as a global access (`E0363`), and the call-graph and shared-state walkers now share one AST traversal so they cannot drift apart.
 - Fixed a heap-use-after-free in `uinx::Type` copy assignment (`t = *t.pointee`) found by AddressSanitizer.
 - Repository hygiene: added `CMakePresets.json`, GitHub Actions CI (GCC, Clang, ASan/UBSan, clang-format), issue/PR templates, `CONTRIBUTING.md`, `.editorconfig` and `.gitattributes`; moved `ARCHITECTURE.md` and `BUILD.md` into `docs/`; moved test registration into `tests/CMakeLists.txt`; added `UINX_WARNINGS_AS_ERRORS` and `UINX_ENABLE_SANITIZERS` options; removed the stale `MANIFEST.sha256` and checked-in `verification/` transcripts.
 - Reworked borrow checking around backward liveness plus forward control-flow fixed points instead of block-local statement numbering.

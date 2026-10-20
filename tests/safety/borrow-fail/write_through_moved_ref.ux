@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# TEST: safety.borrow.write-through-moved-ref
+# EXPECT: compile-fail
+# EXPECT-DIAGNOSTIC: E0400
+# Writing through a moved mutref is a use after move.
+
+func main() -> i32:
+    var x = 1
+    val r = borrow mut x
+    val moved = r
+    deref r = 2
+    deref moved = 3
+    return 0

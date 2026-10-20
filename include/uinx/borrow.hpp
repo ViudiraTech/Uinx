@@ -33,6 +33,10 @@ class BorrowChecker {
         std::string place;
         SourceRange range{};
         bool mut{false};
+        // Reference places this origin was reborrowed through (`borrow deref r`),
+        // nearest first. Loans held by those references do not conflict with the
+        // reborrow, and they stay frozen for as long as the reborrow lives.
+        std::vector<std::string> via;
     };
     struct State {
         std::unordered_set<std::string> moved;
@@ -99,13 +103,28 @@ class BorrowChecker {
     bool is_copy_type(const Type& type) const;
     bool states_equivalent(const State& a, const State& b) const;
 
-    void
-    access_place(const std::string& place, const SourceRange& range, Access access, State& state);
+    void access_place(const std::string& place,
+                      const SourceRange& range,
+                      Access access,
+                      State& state,
+                      const std::vector<std::string>& via = {});
     void begin_borrow(const std::string& place,
                       std::string borrower,
                       bool mut,
                       const SourceRange& range,
-                      State& state);
+                      State& state,
+                      const std::vector<std::string>& via = {});
+    // `borrow deref r` reborrows through the reference place `r`.
+    std::optional<std::string> reborrow_parent(const ast::Expr& target) const;
+    // Writing through a reference (`deref r = v`) must respect loans on `r`.
+    void write_through_reference(const ast::Expr& target, State& state);
+    // Implicit reborrow of a `mutref` argument passed to a `mutref` parameter.
+    bool is_reborrow_argument(const ast::CallExpr& call, std::size_t index) const;
+    void inspect_call_argument(const ast::CallExpr& call,
+                               std::size_t index,
+                               std::vector<std::string>& guards,
+                               State& state);
+    void release_call_guards(const std::vector<std::string>& guards, State& state);
     // Two-phase borrow protocol (rustc two-phase borrows):
     // reservation acts as shared, activation upgrades to exclusive.
     void begin_two_phase_reservation(const std::string& place,

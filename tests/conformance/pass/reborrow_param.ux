@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# TEST: conformance.positive.reborrow-param
+# EXPECT: compile-pass
+# Reborrowing through a reference parameter.
+
+func f(p: mutref i32) -> i32:
+    val a = borrow mut deref p
+    deref a = 4
+    deref p = 5
+    return deref p
+func main() -> i32:
+    var x = 0
+    return f(borrow mut x) - 5

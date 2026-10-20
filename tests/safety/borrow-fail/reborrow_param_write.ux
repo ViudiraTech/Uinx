@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# TEST: safety.borrow.reborrow-param-write
+# EXPECT: compile-fail
+# EXPECT-DIAGNOSTIC: E0403
+# Writing through a reference parameter while its reborrow is live.
+
+func f(p: mutref i32) -> unit:
+    val a = borrow mut deref p
+    deref p = 5
+    deref a = 4
+    return
+func main() -> i32:
+    return 0

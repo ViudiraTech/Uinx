@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# TEST: safety.borrow.reborrow-two-args
+# EXPECT: compile-fail
+# EXPECT-DIAGNOSTIC: E0406
+# The same mutref cannot be reborrowed twice in one call.
+
+func two(a: mutref i32, b: mutref i32) -> unit:
+    return
+func main() -> i32:
+    var x = 1
+    val r = borrow mut x
+    two(r, r)
+    return 0

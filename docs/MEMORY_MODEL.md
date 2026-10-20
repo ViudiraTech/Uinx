@@ -45,6 +45,15 @@ MIR/code generation:
   shared-like, inspects args, then activates to exclusive. This accepts
   `v.push(v.len())`. Function `borrow mut` args and `x += x` compound
   assignment use the same reservation/activation protocol;
+- passing a `mutref` place to a `mutref` parameter reborrows it for the call
+  instead of moving it (`inc(r); inc(r)`); a second use of the same reference in
+  the same argument list conflicts, and a call whose result may carry a
+  reference still moves the argument;
+- `borrow deref r` / `borrow mut deref r` reborrow through `r`: the new
+  reference inherits `r`'s origins without conflicting with `r`'s own loans,
+  and `r` (and every ancestor of a nested reborrow) is frozen while the
+  reborrow is live. Writes through a reference (`deref r = v`) respect loans
+  on `r` and reject a moved `r`;
 - reference provenance through bindings, aggregates, calls, method receivers;
 - stack references cannot escape scope/function (`E0404/E0405`);
 - branch/loop fixed-point merging; NLL-style loan expiry via backward

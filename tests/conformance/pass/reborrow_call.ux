@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# TEST: conformance.positive.reborrow-call
+# EXPECT: compile-pass
+# Passing a mutref to a mutref parameter reborrows instead of moving it.
+
+func inc(r: mutref i32) -> unit:
+    deref r += 1
+    return
+func twice(r: mutref i32) -> unit:
+    inc(r)
+    inc(r)
+    return
+func main() -> i32:
+    var x = 0
+    twice(borrow mut x)
+    val r = borrow mut x
+    var i = 0
+    loop:
+        if i >= 3:
+            break
+        inc(r)
+        i += 1
+    return deref r - 5

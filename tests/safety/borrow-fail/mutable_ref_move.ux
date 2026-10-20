@@ -12,6 +12,7 @@ func consume(value: mutref i32) -> unit:
 func main() -> i32:
     var x = 1
     val first = borrow mut x
+    val second = first
     consume(first)
-    consume(first)
+    consume(second)
     return 0

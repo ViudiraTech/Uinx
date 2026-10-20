@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# TEST: safety.smp.global-in-condition
+# EXPECT: compile-fail
+# EXPECT-DIAGNOSTIC: E0363
+# Walker coverage: a mutable global in a loop condition.
+
+dontneed std
+smp auto
+
+static var counter: u64 = 0
+public unsafe concurrent func f() -> u64:
+    while counter < 3:
+        return 1
+    return 0

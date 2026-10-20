@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# TEST: safety.borrow.reborrow-double-mut
+# EXPECT: compile-fail
+# EXPECT-DIAGNOSTIC: E0402
+# Two live mutable reborrows of the same reference conflict.
+
+func main() -> i32:
+    var x = 1
+    val r = borrow mut x
+    val a = borrow mut deref r
+    val b = borrow mut deref r
+    deref a = 1
+    deref b = 2
+    return 0

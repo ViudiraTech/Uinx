@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# TEST: safety.borrow.reborrow-after-move
+# EXPECT: compile-fail
+# EXPECT-DIAGNOSTIC: E0400
+# A moved mutref cannot be reborrowed by a later call.
+
+func inc(r: mutref i32) -> unit:
+    deref r += 1
+    return
+func main() -> i32:
+    var x = 1
+    val r = borrow mut x
+    val moved = r
+    inc(r)
+    inc(moved)
+    return 0

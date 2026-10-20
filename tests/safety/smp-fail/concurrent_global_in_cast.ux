@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# TEST: safety.smp.global-in-cast
+# EXPECT: compile-fail
+# EXPECT-DIAGNOSTIC: E0363
+# Walker coverage: a mutable global under a cast in a let initializer.
+
+dontneed std
+smp auto
+
+static var n: u64 = 3
+public unsafe concurrent func f() -> u32:
+    val a = n as u32
+    return a
