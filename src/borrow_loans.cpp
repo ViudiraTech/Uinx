@@ -41,20 +41,30 @@ void BorrowChecker::promote_reference_value(const std::string& borrower,
         return;
 
     state.borrows.erase(
-        std::remove_if(state.borrows.begin(),
-                       state.borrows.end(),
-                       [&](const Borrow& loan) {
-                           if (loan.borrower != "<temporary>")
-                               return false;
-                           return std::any_of(
-                               origins.begin(), origins.end(), [&](const RefOrigin& o) {
-                                   return overlaps(loan.place, o.place);
-                               });
-                       }),
+        std::remove_if(
+            state.borrows.begin(),
+            state.borrows.end(),
+            [&](const Borrow& loan) {
+                if (loan.borrower != "<temporary>")
+                    return false;
+                return std::any_of(origins.begin(), origins.end(), [&](const RefOrigin& o) {
+                    return overlaps(loan.place, o.place) ||
+                           std::find(o.via.begin(), o.via.end(), loan.place) != o.via.end();
+                });
+            }),
         state.borrows.end());
 
-    for (const auto& origin : origins)
-        begin_borrow(origin.place, borrower, origin.mut, origin.range, state);
+    for (const auto& origin : origins) {
+        // Loans held by the references this one was reborrowed through, and by
+        // the borrower itself, are not conflicts.
+        std::vector<std::string> exempt = origin.via;
+        exempt.push_back(borrower);
+        begin_borrow(origin.place, borrower, origin.mut, origin.range, state, exempt);
+        // A reborrow also freezes the reference it was taken through: `r` is
+        // unusable (or read-only) while the reborrow is live.
+        for (const auto& parent : origin.via)
+            begin_borrow(parent, borrower, origin.mut, origin.range, state, exempt);
+    }
 }
 
 void BorrowChecker::bind_reference_expression(const std::string& destination,
@@ -105,7 +115,11 @@ void BorrowChecker::bind_reference_expression(const std::string& destination,
 void BorrowChecker::access_place(const std::string& place,
                                  const SourceRange& range,
                                  Access access,
-                                 State& state) {
+                                 State& state,
+                                 const std::vector<std::string>& via) {
+    const auto held_by_parent = [&](const Borrow& loan) {
+        return std::find(via.begin(), via.end(), loan.borrower) != via.end();
+    };
     if (access == Access::Move) {
         const Type type = type_of_place(place, state);
         if (is_copy_type(type))
@@ -151,6 +165,8 @@ void BorrowChecker::access_place(const std::string& place,
 
     if (access == Access::BorrowShared) {
         for (const auto& loan : state.borrows) {
+            if (held_by_parent(loan))
+                continue;
             if (places_conflict(place, loan.place) && is_active_mut(loan)) {
                 report_error(range,
                              "E0401",
@@ -178,6 +194,8 @@ void BorrowChecker::access_place(const std::string& place,
 
     if (access == Access::BorrowMut) {
         for (const auto& loan : state.borrows) {
+            if (held_by_parent(loan))
+                continue;
             if (places_conflict(place, loan.place)) {
                 // A two-phase reservation of the same place by the same
                 // statement is upgraded at activation, not a conflict here.
@@ -210,8 +228,9 @@ void BorrowChecker::begin_borrow(const std::string& place,
                                  std::string borrower,
                                  bool mut,
                                  const SourceRange& range,
-                                 State& state) {
-    access_place(place, range, mut ? Access::BorrowMut : Access::BorrowShared, state);
+                                 State& state,
+                                 const std::vector<std::string>& via) {
+    access_place(place, range, mut ? Access::BorrowMut : Access::BorrowShared, state, via);
     Borrow loan;
     loan.place = place;
     loan.borrower = std::move(borrower);
@@ -305,15 +324,10 @@ void BorrowChecker::inspect_call_with_two_phase(const ast::CallExpr& call, State
     }
     // Args are inspected while the receiver reservation is shared-like, so
     // `v.push(v.len())` is accepted: `v.len()` shared-borrows while reserved.
-    for (const auto& arg : call.args) {
-        const auto type = model_.expr_types.find(arg.get());
-        Access arg_access = Access::Move;
-        if (type != model_.expr_types.end() && type->second.kind == TypeKind::Ref &&
-            !type->second.mut) {
-            arg_access = Access::Read;
-        }
-        inspect_expr(*arg, state, arg_access);
-    }
+    std::vector<std::string> guards;
+    for (std::size_t i = 0; i < call.args.size(); ++i)
+        inspect_call_argument(call, i, guards, state);
+    release_call_guards(guards, state);
     if (reserved) {
         activate_two_phase(reservation_id, call.range, state);
         // Call-duration exclusive borrow ends with the call (unless the
@@ -322,5 +336,117 @@ void BorrowChecker::inspect_call_with_two_phase(const ast::CallExpr& call, State
     }
     // Receiver provenance: method may return borrow of receiver.
     // Keep existing reference_origins handling via caller.
+}
+
+std::optional<std::string> BorrowChecker::reborrow_parent(const ast::Expr& target) const {
+    if (target.kind != ast::ExprKind::Unary)
+        return std::nullopt;
+    const auto& unary = static_cast<const ast::UnaryExpr&>(target);
+    if (unary.op != "*" || !unary.operand)
+        return std::nullopt;
+    const auto operand_type = model_.expr_types.find(unary.operand.get());
+    if (operand_type == model_.expr_types.end() || operand_type->second.kind != TypeKind::Ref)
+        return std::nullopt;
+    return place_of(*unary.operand);
+}
+
+void BorrowChecker::write_through_reference(const ast::Expr& target, State& state) {
+    const ast::Expr* base = &target;
+    while (base->kind == ast::ExprKind::Member || base->kind == ast::ExprKind::Index) {
+        base = base->kind == ast::ExprKind::Member
+                   ? static_cast<const ast::MemberExpr&>(*base).base.get()
+                   : static_cast<const ast::IndexExpr&>(*base).base.get();
+    }
+    const auto parent = reborrow_parent(*base);
+    if (!parent)
+        return;
+    if (unavailable(*parent, state)) {
+        report_error(
+            target.range, "E0400", "use of moved value/place '" + display_place(*parent) + "'");
+        return;
+    }
+    for (const auto& loan : state.borrows) {
+        // `<external:...>` stands for the referent behind a reference, not for
+        // the reference itself.
+        if (loan.place.starts_with("<external:"))
+            continue;
+        if (places_conflict(*parent, loan.place)) {
+            report_error(target.range,
+                         "E0403",
+                         "cannot write through '" + display_place(*parent) +
+                             "' while it is borrowed");
+        }
+    }
+}
+
+bool BorrowChecker::is_reborrow_argument(const ast::CallExpr& call, std::size_t index) const {
+    const ast::Expr& arg = *call.args[index];
+    if (!place_of(arg))
+        return false;
+    const auto arg_type = model_.expr_types.find(&arg);
+    if (arg_type == model_.expr_types.end() || arg_type->second.kind != TypeKind::Ref ||
+        !arg_type->second.mut)
+        return false;
+    // A result that may carry the reborrow keeps the old move semantics: its
+    // lifetime would have to be tied to the argument.
+    if (const auto call_type = model_.expr_types.find(&call);
+        call_type != model_.expr_types.end()) {
+        std::unordered_set<std::string> visiting;
+        if (contains_reference(call_type->second, visiting))
+            return false;
+    }
+    const FunctionSig* signature = nullptr;
+    std::size_t offset = 0;
+    if (call.callee->kind == ast::ExprKind::Name) {
+        const auto found =
+            model_.functions.find(static_cast<const ast::NameExpr&>(*call.callee).name);
+        if (found != model_.functions.end())
+            signature = &found->second;
+    } else if (call.callee->kind == ast::ExprKind::Member) {
+        const auto& member = static_cast<const ast::MemberExpr&>(*call.callee);
+        Type owner{};
+        if (const auto type = model_.expr_types.find(member.base.get());
+            type != model_.expr_types.end())
+            owner = type->second;
+        if (owner.kind == TypeKind::Ref && owner.pointee)
+            owner = *owner.pointee;
+        const auto found = model_.functions.find(owner.name + "::" + member.member);
+        if (found != model_.functions.end()) {
+            signature = &found->second;
+            offset = 1;
+        }
+    }
+    if (!signature || index + offset >= signature->params.size())
+        return false;
+    const Type& parameter = signature->params[index + offset];
+    return parameter.kind == TypeKind::Ref && parameter.mut;
+}
+
+void BorrowChecker::inspect_call_argument(const ast::CallExpr& call,
+                                          std::size_t index,
+                                          std::vector<std::string>& guards,
+                                          State& state) {
+    const ast::Expr& arg = *call.args[index];
+    if (is_reborrow_argument(call, index)) {
+        // `f(r)` with `r: mutref T` and `f(mutref T)` reborrows `*r` for the call
+        // instead of moving `r`. The guard makes a second use of `r` in the same
+        // argument list a conflict, matching rustc.
+        inspect_expr(arg, state, Access::Read);
+        const std::string id = "<reborrow:" + std::to_string(call.range.begin.line) + ":" +
+                               std::to_string(call.range.begin.column) + ":" +
+                               std::to_string(index) + ">";
+        begin_borrow(*place_of(arg), id, true, arg.range, state);
+        guards.push_back(id);
+        return;
+    }
+    const auto type = model_.expr_types.find(&arg);
+    const bool shared_ref =
+        type != model_.expr_types.end() && type->second.kind == TypeKind::Ref && !type->second.mut;
+    inspect_expr(arg, state, shared_ref ? Access::Read : Access::Move);
+}
+
+void BorrowChecker::release_call_guards(const std::vector<std::string>& guards, State& state) {
+    for (const auto& id : guards)
+        kill_borrower(id, state);
 }
 } // namespace uinx

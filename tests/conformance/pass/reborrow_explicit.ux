@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# TEST: conformance.positive.reborrow-explicit
+# EXPECT: compile-pass
+# borrow [mut] deref r reborrows; the parent is usable again after the last use.
+
+func main() -> i32:
+    var x = 1
+    val r = borrow mut x
+    val r2 = borrow mut deref r
+    deref r2 = 5
+    deref r = 6
+    val s = borrow deref r
+    val t = borrow deref r
+    return deref s + deref t - 12

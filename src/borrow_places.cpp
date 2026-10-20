@@ -148,12 +148,22 @@ std::vector<BorrowChecker::RefOrigin> BorrowChecker::reference_origins(const ast
     if (expr.kind == ast::ExprKind::Borrow) {
         const auto& borrow = static_cast<const ast::BorrowExpr&>(expr);
         if (auto place = place_of(*borrow.target)) {
-            result.push_back({*place, expr.range, borrow.mut});
+            result.push_back({*place, expr.range, borrow.mut, {}});
             return result;
         }
         result = reference_origins(*borrow.target, state);
         for (auto& origin : result)
             origin.mut = borrow.mut;
+        if (const auto parent = reborrow_parent(*borrow.target)) {
+            // Reference parameters have no recorded origin; track the reborrow
+            // against an external place so the parent is still frozen.
+            if (result.empty())
+                result.push_back({"<external:" + *parent + ">", expr.range, borrow.mut, {}});
+            for (auto& origin : result) {
+                origin.range = expr.range;
+                origin.via.insert(origin.via.begin(), *parent);
+            }
+        }
         return result;
     }
 
@@ -208,11 +218,13 @@ std::vector<BorrowChecker::RefOrigin> BorrowChecker::reference_origins(const ast
                                 // it back to its concrete argument when the call itself is bound.
                                 result.push_back({"<external:" + *receiver_place + ">",
                                                   expr.range,
-                                                  method->second.params.front().mut});
+                                                  method->second.params.front().mut,
+                                                  {}});
                             } else {
                                 result.push_back({*receiver_place,
                                                   expr.range,
-                                                  method->second.params.front().mut});
+                                                  method->second.params.front().mut,
+                                                  {}});
                             }
                         }
                     }

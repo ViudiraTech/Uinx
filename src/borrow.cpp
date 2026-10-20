@@ -107,6 +107,8 @@ void BorrowChecker::check_stmt(const ast::Stmt& stmt, State& state) {
             kill_borrowers_under(*target, state);
 
         inspect_expr(*assign->value, state, Access::Move);
+        if (!target)
+            write_through_reference(*assign->target, state);
         if (target) {
             access_place(*target, assign->target->range, Access::Write, state);
             mark_initialized(*target, state);

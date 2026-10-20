@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+# TEST: safety.borrow.reborrow-read-parent
+# EXPECT: compile-fail
+# EXPECT-DIAGNOSTIC: E0406
+# Reading the parent while a mutable reborrow is live.
+
+func main() -> i32:
+    var x = 1
+    val r = borrow mut x
+    val r2 = borrow mut deref r
+    val v = deref r
+    deref r2 = v
+    return 0

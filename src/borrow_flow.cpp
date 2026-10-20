@@ -135,6 +135,17 @@ void BorrowChecker::inspect_expr(const ast::Expr& expr, State& state, Access acc
             const auto& borrow = static_cast<const ast::BorrowExpr&>(expr);
             if (auto place = place_of(*borrow.target)) {
                 begin_borrow(*place, "<temporary>", borrow.mut, expr.range, state);
+            } else if (const auto parent = reborrow_parent(*borrow.target)) {
+                access_place(*parent, expr.range, Access::Read, state);
+                for (const auto& origin : reference_origins(expr, state)) {
+                    std::vector<std::string> exempt = origin.via;
+                    exempt.push_back("<temporary>");
+                    begin_borrow(
+                        origin.place, "<temporary>", borrow.mut, expr.range, state, exempt);
+                    for (const auto& ancestor : origin.via)
+                        begin_borrow(
+                            ancestor, "<temporary>", borrow.mut, expr.range, state, exempt);
+                }
             } else {
                 const auto origins = reference_origins(*borrow.target, state);
                 if (!origins.empty()) {
@@ -196,36 +207,26 @@ void BorrowChecker::inspect_expr(const ast::Expr& expr, State& state, Access acc
                     }
                 }
             }
+            std::vector<std::string> guards;
             if (!reserved_places.empty()) {
-                for (const auto& arg : call.args) {
+                for (std::size_t i = 0; i < call.args.size(); ++i) {
                     // Skip already-reserved `borrow mut` args (reservation
                     // covers them); inspect others while reserved.
-                    if (arg->kind == ast::ExprKind::Borrow &&
-                        static_cast<const ast::BorrowExpr&>(*arg).mut)
+                    if (call.args[i]->kind == ast::ExprKind::Borrow &&
+                        static_cast<const ast::BorrowExpr&>(*call.args[i]).mut)
                         continue;
-                    const auto type = model_.expr_types.find(arg.get());
-                    Access arg_access = Access::Move;
-                    if (type != model_.expr_types.end() && type->second.kind == TypeKind::Ref &&
-                        !type->second.mut) {
-                        arg_access = Access::Read;
-                    }
-                    inspect_expr(*arg, state, arg_access);
+                    inspect_call_argument(call, i, guards, state);
                 }
+                release_call_guards(guards, state);
                 for (const auto& rid : reservation_ids)
                     activate_two_phase(rid, call.range, state);
                 for (const auto& rid : reservation_ids)
                     kill_borrower(rid, state);
                 break;
             }
-            for (const auto& arg : call.args) {
-                const auto type = model_.expr_types.find(arg.get());
-                Access arg_access = Access::Move;
-                if (type != model_.expr_types.end() && type->second.kind == TypeKind::Ref &&
-                    !type->second.mut) {
-                    arg_access = Access::Read;
-                }
-                inspect_expr(*arg, state, arg_access);
-            }
+            for (std::size_t i = 0; i < call.args.size(); ++i)
+                inspect_call_argument(call, i, guards, state);
+            release_call_guards(guards, state);
             break;
         }
         case ast::ExprKind::Index: {
