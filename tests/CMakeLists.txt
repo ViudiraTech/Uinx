@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 ViudiraTech
+# By JiTianYu391
+
+add_executable(uinx-unit-tests unit/compiler_unit.cpp)
+target_link_libraries(uinx-unit-tests PRIVATE uinx_compiler)
+add_test(NAME unit.compiler COMMAND uinx-unit-tests)
+add_executable(uinx-runtime-tests unit/runtime_unit.c)
+target_link_libraries(uinx-runtime-tests PRIVATE uinx_runtime)
+add_test(NAME unit.runtime COMMAND uinx-runtime-tests)
+add_test(NAME codegen.asm-object COMMAND $<TARGET_FILE:uinxc> ${PROJECT_SOURCE_DIR}/tests/codegen/asm/x86_64_nop.ux --emit=obj -o ${PROJECT_BINARY_DIR}/asm-test.o)
+add_test(NAME codegen.asm-input-output COMMAND ${CMAKE_COMMAND} -DUINXC=$<TARGET_FILE:uinxc> -DSOURCE=${PROJECT_SOURCE_DIR}/tests/codegen/asm/x86_64_io.ux -DOUTPUT=${PROJECT_BINARY_DIR}/asm-io -P ${PROJECT_SOURCE_DIR}/cmake/RunExecutableTest.cmake)
+add_test(NAME codegen.asm-inout COMMAND ${CMAKE_COMMAND} -DUINXC=$<TARGET_FILE:uinxc> -DSOURCE=${PROJECT_SOURCE_DIR}/tests/codegen/asm/x86_64_inout.ux -DOUTPUT=${PROJECT_BINARY_DIR}/asm-inout -P ${PROJECT_SOURCE_DIR}/cmake/RunExecutableTest.cmake)
+add_test(NAME codegen.asm-multiple-outputs COMMAND ${CMAKE_COMMAND} -DUINXC=$<TARGET_FILE:uinxc> -DSOURCE=${PROJECT_SOURCE_DIR}/tests/codegen/asm/x86_64_multiout.ux -DOUTPUT=${PROJECT_BINARY_DIR}/asm-multiout -P ${PROJECT_SOURCE_DIR}/cmake/RunExecutableTest.cmake)
+add_test(NAME runtime.slice-index-bounds COMMAND ${CMAKE_COMMAND} -DUINXC=$<TARGET_FILE:uinxc> -DSOURCE=${PROJECT_SOURCE_DIR}/tests/conformance/pass/slice_index.ux -DOUTPUT=${PROJECT_BINARY_DIR}/slice-index -P ${PROJECT_SOURCE_DIR}/cmake/RunExecutableTest.cmake)
+add_test(NAME runtime.slice-index-oob-traps COMMAND ${CMAKE_COMMAND} -DUINXC=$<TARGET_FILE:uinxc> -DSOURCE=${PROJECT_SOURCE_DIR}/tests/conformance/pass/slice_oob.ux -DOUTPUT=${PROJECT_BINARY_DIR}/slice-oob -P ${PROJECT_SOURCE_DIR}/cmake/RunExpectedRuntimeFailure.cmake)
+add_test(NAME runtime.c-ffi COMMAND ${CMAKE_COMMAND} -DUINXC=$<TARGET_FILE:uinxc> -DSOURCE=${PROJECT_SOURCE_DIR}/examples/c_ffi.ux -DOUTPUT=${PROJECT_BINARY_DIR}/c-ffi -P ${PROJECT_SOURCE_DIR}/cmake/RunExecutableTest.cmake)
+add_test(NAME headers.enabled COMMAND ${CMAKE_COMMAND} -DUINXC=$<TARGET_FILE:uinxc> -DSOURCE=${PROJECT_SOURCE_DIR}/tests/headers/main.ux -DINCLUDE_DIR=${PROJECT_SOURCE_DIR}/tests/headers/include -DOUTPUT=${PROJECT_BINARY_DIR}/header-test -P ${PROJECT_SOURCE_DIR}/cmake/RunHeaderTest.cmake)
+add_test(NAME codegen.cross-target-objects COMMAND ${CMAKE_COMMAND} -DUINXC=$<TARGET_FILE:uinxc> -DSOURCE=${PROJECT_SOURCE_DIR}/examples/freestanding.ux -DBINARY_DIR=${PROJECT_BINARY_DIR} -P ${PROJECT_SOURCE_DIR}/cmake/RunCrossTargetTests.cmake)
+add_test(NAME codegen.asm-cross-targets COMMAND ${CMAKE_COMMAND} -DUINXC=$<TARGET_FILE:uinxc> -DSOURCE=${PROJECT_SOURCE_DIR}/tests/codegen/asm/cross_nop.ux -DBINARY_DIR=${PROJECT_BINARY_DIR} -P ${PROJECT_SOURCE_DIR}/cmake/RunAsmCrossTargets.cmake)
+add_test(NAME codegen.asm-invalid-target-register COMMAND ${CMAKE_COMMAND} -DUINXC=$<TARGET_FILE:uinxc> -DSOURCE=${PROJECT_SOURCE_DIR}/tests/codegen/asm/invalid_aarch64_reg.ux -DOUTPUT=${PROJECT_BINARY_DIR}/asm-invalid.o -P ${PROJECT_SOURCE_DIR}/cmake/RunInvalidAsmConstraint.cmake)
+add_test(NAME codegen.baremetal-cross-link COMMAND ${CMAKE_COMMAND} -DUINXC=$<TARGET_FILE:uinxc> -DCLANG=clang -DLD_LLD=ld.lld -DSOURCE_DIR=${PROJECT_SOURCE_DIR}/examples/baremetal -DBINARY_DIR=${PROJECT_BINARY_DIR} -P ${PROJECT_SOURCE_DIR}/cmake/RunBareMetalTests.cmake)
+add_test(NAME runtime.async-suspend-resume COMMAND ${CMAKE_COMMAND} -DUINXC=$<TARGET_FILE:uinxc> -DSOURCE=${PROJECT_SOURCE_DIR}/tests/runtime/async/suspend_resume.ux -DUINX_OBJ=${PROJECT_BINARY_DIR}/async-test.o -DCLANG=clang -DRUNTIME_INCLUDE=${PROJECT_SOURCE_DIR}/runtime -DHARNESS=${PROJECT_SOURCE_DIR}/tests/support/async_harness.c -DRUNTIME_LIB=$<TARGET_FILE:uinx_runtime> -DOUTPUT=${PROJECT_BINARY_DIR}/async-test -P ${PROJECT_SOURCE_DIR}/cmake/RunAsyncTest.cmake)
+add_test(NAME conformance.positive COMMAND ${CMAKE_COMMAND} -DUINXC=$<TARGET_FILE:uinxc> -DTEST_DIR=${PROJECT_SOURCE_DIR}/tests/conformance/pass -P ${PROJECT_SOURCE_DIR}/cmake/RunPassTests.cmake)
+add_test(NAME conformance.negative COMMAND ${CMAKE_COMMAND} -DUINXC=$<TARGET_FILE:uinxc> -DTEST_DIR=${PROJECT_SOURCE_DIR}/tests/conformance/fail -P ${PROJECT_SOURCE_DIR}/cmake/RunFailTests.cmake)
+add_test(NAME safety.borrow-negative COMMAND ${CMAKE_COMMAND} -DUINXC=$<TARGET_FILE:uinxc> -DTEST_DIR=${PROJECT_SOURCE_DIR}/tests/safety/borrow-fail -P ${PROJECT_SOURCE_DIR}/cmake/RunFailTests.cmake)
+add_test(NAME safety.smp-negative COMMAND ${CMAKE_COMMAND} -DUINXC=$<TARGET_FILE:uinxc> -DTEST_DIR=${PROJECT_SOURCE_DIR}/tests/safety/smp-fail -P ${PROJECT_SOURCE_DIR}/cmake/RunFailTests.cmake)
+add_test(NAME tooling.package-integration COMMAND ${CMAKE_COMMAND} -DUINX=$<TARGET_FILE:uinx> -DWORK=${PROJECT_BINARY_DIR}/package-tooling -P ${PROJECT_SOURCE_DIR}/cmake/RunPackageToolingTest.cmake)

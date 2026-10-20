@@ -1,9 +1,19 @@
+# Build trees
 /build/
 /build-*/
 /Testing/
+CMakeUserPresets.json
+compile_commands.json
+
+# Uinx outputs
 .uinx/
 target/
 *.o
 *.ll
 *.elf
+
+# Editor / tooling
 *.vsix
+.vscode/
+.idea/
+.cache/

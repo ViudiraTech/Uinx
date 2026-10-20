@@ -6,6 +6,7 @@
 #include "uinx/ast.hpp"
 
 #include <memory>
+#include <utility>
 
 namespace uinx {
 enum class TypeKind {
@@ -41,6 +42,16 @@ struct Type {
     std::shared_ptr<Type> pointee;
     bool mut{false};
     bool nullable{false};
+    Type() = default;
+    Type(const Type&) = default;
+    Type(Type&&) noexcept = default;
+    Type& operator=(Type&&) noexcept = default;
+    // `t = *t.pointee` must not destroy the source before it is copied, so build
+    // the copy first and then move it into place.
+    Type& operator=(const Type& other) {
+        Type copy{other};
+        return *this = std::move(copy);
+    }
     static Type builtin(std::string_view name);
     static Type named(std::string name, std::vector<Type> args = {});
     static Type generic(std::string name);

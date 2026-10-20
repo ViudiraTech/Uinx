@@ -646,7 +646,7 @@ bool LLVMCodegen::emit_syscall(std::ostream& os,
                                std::unordered_map<std::string, std::string>& values,
                                std::unordered_map<std::string, Type>& value_types,
                                std::size_t& counter) const {
-    const int arity = in.args.size();
+    const int arity = static_cast<int>(in.args.size());
     if (arity < 1 || arity > 7)
         return false;
 

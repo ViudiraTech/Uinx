@@ -106,9 +106,8 @@ SourceSelection source_selection(const std::filesystem::path& root, const Manife
 
         if (name == "std")
             selection.std_mode = disabled ? "none" : "full";
-        else if (!disabled &&
-                 (name == "core" || name == "alloc" || name == "sys" || name == "os" ||
-                  name == "fmt" || name == "minimal"))
+        else if (!disabled && (name == "core" || name == "alloc" || name == "sys" || name == "os" ||
+                               name == "fmt" || name == "minimal"))
             selection.std_mode = name;
         else if (name == "runtime")
             selection.runtime = !disabled;
@@ -794,14 +793,8 @@ int main(int argc, char** argv) {
             return 2;
         }
         std::filesystem::path executable;
-        const int result =
-            build_project(root,
-                          manifest,
-                          EmitKind::Executable,
-                          release,
-                          &executable,
-                          smp_override,
-                          auto_repair);
+        const int result = build_project(
+            root, manifest, EmitKind::Executable, release, &executable, smp_override, auto_repair);
         if (result)
             return result;
         return std::system(("\"" + executable.string() + "\"").c_str());

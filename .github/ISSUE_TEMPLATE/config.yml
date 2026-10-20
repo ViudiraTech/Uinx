@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security report
+    url: https://github.com/ViudiraTech/Uinx/blob/main/SECURITY.md
+    about: Compiler crashes, borrow-checker soundness failures and memory-safety escapes

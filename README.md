@@ -380,6 +380,9 @@ boundary rather than hidden behind a wrapper that simply invokes the C++ compile
 
 | Document | Purpose |
 |---|---|
+| `docs/BUILD.md` | build, install and cross-target instructions |
+| `docs/ARCHITECTURE.md` | compiler pipeline and runtime design |
+| `docs/TOOLING.md` | `uinx` / `uinxc` / `uinx-lsp` usage |
 | `docs/LANGUAGE_SPEC.md` | canonical implemented grammar and semantics |
 | `docs/MEMORY_MODEL.md` | ownership, aliasing, atomics, SMP, fences |
 | `docs/BOOTSTRAP.md` | honest self-hosting/bootstrap acceptance criteria |
