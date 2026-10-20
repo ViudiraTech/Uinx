@@ -1,6 +1,0 @@
-$ cmake -S . -B build-final -G Ninja -DCMAKE_BUILD_TYPE=Release
-Result: PASS
-$ cmake --build build-final -j2
-Result: PASS (28 build steps; 0 compiler warnings)
-$ build-final/uinx --version
-uinx 0.3.0

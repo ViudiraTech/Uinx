@@ -1,6 +1,0 @@
-MIR optimizer probe
-O0 IR lines: 29
-O2 IR lines: 22
-O0 i32 loads: 6
-O2 i32 loads: 0
-O2 folded expression present: yes

@@ -765,9 +765,7 @@ std::pair<std::string, Type> MIRLowerer::lower_expr(const ast::Expr& e, FnState&
             std::unordered_set<std::string> field_generics(si->second.generic_names.begin(),
                                                            si->second.generic_names.end());
             std::unordered_map<std::string, Type> field_subst;
-            for (std::size_t i = 0;
-                 i < si->second.generic_names.size() && i < ty.args.size();
-                 ++i)
+            for (std::size_t i = 0; i < si->second.generic_names.size() && i < ty.args.size(); ++i)
                 field_subst[si->second.generic_names[i]] = ty.args[i];
             std::vector<std::string> args;
             for (const auto& decl_field : si->second.decl->fields) {
@@ -777,8 +775,8 @@ std::pair<std::string, Type> MIRLowerer::lower_expr(const ast::Expr& e, FnState&
                     continue;
                 }
                 auto [field_value, field_actual] = lower_expr(*it->second, s);
-                const Type field_expected = substitute_type(
-                    type_from_ast(decl_field.type, field_generics), field_subst);
+                const Type field_expected =
+                    substitute_type(type_from_ast(decl_field.type, field_generics), field_subst);
                 args.push_back(
                     coerce_value(s, field_value, field_actual, field_expected, it->second->range));
             }

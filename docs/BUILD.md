@@ -15,6 +15,20 @@ Verified release environment:
 
 The project intentionally does not require LLVM C++ development headers. `uinxc` emits LLVM IR directly and invokes a configured Clang driver for LLVM IR to object conversion. Object linking is a separate phase.
 
+## Presets
+
+`CMakePresets.json` provides `debug`, `release`, `ci` (Release with warnings as
+errors), `asan` (ASan + UBSan on the C++ compiler code) and `fuzz`:
+
+```sh
+cmake --preset ci
+cmake --build --preset ci
+ctest --preset ci
+```
+
+Build trees go to `build/<preset>/`. Local overrides belong in the git-ignored
+`CMakeUserPresets.json`.
+
 ## Release build
 
 ```sh

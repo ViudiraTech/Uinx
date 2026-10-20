@@ -144,11 +144,8 @@ class MIRLowerer {
     std::string lower_place_address(const ast::Expr& e, FnState& s);
     Type expr_type(const ast::Expr& e, const FnState& s) const;
     Type subst_type(const Type& t, const FnState& s) const;
-    std::string coerce_value(FnState& s,
-                             std::string value,
-                             const Type& from,
-                             const Type& to,
-                             const SourceRange& range);
+    std::string coerce_value(
+        FnState& s, std::string value, const Type& from, const Type& to, const SourceRange& range);
     std::string specialize_call(const ast::CallExpr& c, const FunctionSig& sig, FnState& s);
     void emit_scope_drops(FnState& s);
     bool place_is_atomic(const ast::Expr& e, const FnState& s) const;

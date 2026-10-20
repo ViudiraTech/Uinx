@@ -1,0 +1,68 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 25, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}"
+    },
+    {
+      "name": "debug",
+      "inherits": "base",
+      "displayName": "Debug",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+    },
+    {
+      "name": "release",
+      "inherits": "base",
+      "displayName": "Release",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    },
+    {
+      "name": "ci",
+      "inherits": "release",
+      "displayName": "CI (Release, warnings as errors)",
+      "cacheVariables": { "UINX_WARNINGS_AS_ERRORS": "ON" }
+    },
+    {
+      "name": "asan",
+      "inherits": "base",
+      "displayName": "Debug + ASan/UBSan",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "UINX_ENABLE_SANITIZERS": "ON"
+      }
+    },
+    {
+      "name": "fuzz",
+      "inherits": "release",
+      "displayName": "Clang + libFuzzer",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "UINX_BUILD_FUZZ": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "debug", "configurePreset": "debug" },
+    { "name": "release", "configurePreset": "release" },
+    { "name": "ci", "configurePreset": "ci" },
+    { "name": "asan", "configurePreset": "asan" },
+    { "name": "fuzz", "configurePreset": "fuzz" }
+  ],
+  "testPresets": [
+    {
+      "name": "default",
+      "hidden": true,
+      "output": { "outputOnFailure": true }
+    },
+    { "name": "debug", "inherits": "default", "configurePreset": "debug" },
+    { "name": "release", "inherits": "default", "configurePreset": "release" },
+    { "name": "ci", "inherits": "default", "configurePreset": "ci" },
+    { "name": "asan", "inherits": "default", "configurePreset": "asan" },
+    { "name": "fuzz", "inherits": "default", "configurePreset": "fuzz" }
+  ]
+}

@@ -4,6 +4,8 @@
 
 **Copyright © 2026 ViudiraTech · Code by JiTianYu391**
 
+- Fixed a heap-use-after-free in `uinx::Type` copy assignment (`t = *t.pointee`) found by AddressSanitizer.
+- Repository hygiene: added `CMakePresets.json`, GitHub Actions CI (GCC, Clang, ASan/UBSan, clang-format), issue/PR templates, `CONTRIBUTING.md`, `.editorconfig` and `.gitattributes`; moved `ARCHITECTURE.md` and `BUILD.md` into `docs/`; moved test registration into `tests/CMakeLists.txt`; added `UINX_WARNINGS_AS_ERRORS` and `UINX_ENABLE_SANITIZERS` options; removed the stale `MANIFEST.sha256` and checked-in `verification/` transcripts.
 - Reworked borrow checking around backward liveness plus forward control-flow fixed points instead of block-local statement numbering.
 - Added HIR `SymbolId`-based place identity so shadowed locals cannot erase or inherit another binding's move/loan state.
 - Added partial move/reinitialization tracking, branch/loop joins, break/continue/return reachability handling, field-level reference provenance, method-receiver provenance, aggregate escape checking, and conservative async suspension checks.
