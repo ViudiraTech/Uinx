@@ -40,9 +40,20 @@ add_library(uinx_compiler
   src/parser.cpp
   src/types.cpp
   src/sema.cpp
+  src/sema_resolve.cpp
+  src/sema_smp.cpp
+  src/sema_stmt.cpp
+  src/sema_expr.cpp
   src/borrow.cpp
+  src/borrow_places.cpp
+  src/borrow_loans.cpp
+  src/borrow_liveness.cpp
+  src/borrow_flow.cpp
   src/mir.cpp
   src/codegen.cpp
+  src/codegen_asm.cpp
+  src/codegen_async.cpp
+  src/codegen_function.cpp
   src/compiler.cpp
 )
 target_include_directories(uinx_compiler PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -74,6 +85,7 @@ if(CLANG_FORMAT_EXECUTABLE)
   file(GLOB_RECURSE UINX_FORMAT_SOURCES CONFIGURE_DEPENDS
     ${CMAKE_CURRENT_SOURCE_DIR}/include/*.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/*.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tools/*.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/*.c
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/*.h
